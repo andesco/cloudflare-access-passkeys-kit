@@ -5,15 +5,17 @@
   "type": "module",
   "scripts": {
     "build:client": "bun build src/web/client.ts --outdir public/assets --target browser --minify",
-    "dev": "bun run build:client && wrangler dev",
-    "dev:local": "bun run build:client && wrangler dev --config wrangler.local.jsonc",
-    "deploy": "bun run build:client && wrangler deploy && wrangler d1 migrations apply DB --remote",
-    "deploy:local": "bun run build:client && wrangler deploy --config wrangler.local.jsonc && wrangler d1 migrations apply DB --config wrangler.local.jsonc --remote",
-    "migrate:local": "wrangler d1 migrations apply DB --config wrangler.local.jsonc --remote",
+    "dev": "bun run build:client && cf dev",
+    "dev:local": "bun run build:client && cf dev --mode personal",
+    "deploy": "bun run build:client && cf deploy && bun run migrate",
+    "deploy:local": "bun run build:client && cf deploy --mode personal && bun run migrate:local",
+    "migrate:local": "cf d1 migrations apply \"$(bun scripts/personal-database-id.ts)\"",
     "admin": "bun src/admin.ts",
-    "check": "bun run build:client && wrangler types --check --env-file .dev.vars.example && tsc --noEmit && wrangler deploy --dry-run",
-    "check:local": "bun run build:client && wrangler types --check --config wrangler.local.jsonc --env-file .dev.vars.example && tsc --noEmit && wrangler deploy --dry-run --config wrangler.local.jsonc",
-    "test": "bun test"
+    "check": "bun run build:client && cf workers types && tsc --noEmit && cf deploy --dry-run",
+    "check:local": "bun run build:client && cf workers types --mode personal && tsc --noEmit && cf deploy --dry-run --mode personal",
+    "test": "bun test",
+    "types": "cf workers types",
+    "migrate": "cf d1 migrations apply \"$D1_DATABASE_ID\""
   },
   "dependencies": {
     "@better-auth/oauth-provider": "1.6.23",
@@ -23,8 +25,9 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260716.1",
     "@types/bun": "1.3.14",
+    "cf": "^1.0.0-beta.12",
     "typescript": "7.0.2",
-    "wrangler": "^4.111.0"
+    "wrangler": "^4.147.0"
   },
   "cloudflare": {
     "bindings": {

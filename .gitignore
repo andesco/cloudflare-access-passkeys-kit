@@ -9,3 +9,5 @@ data/
 wrangler.local.jsonc
 .DS_Store
 public/assets/client.js
+cloudflare.local.ts
+.cloudflare/

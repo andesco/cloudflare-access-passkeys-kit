@@ -21,7 +21,7 @@ Cloudflare Access is the access-control layer. It continues to handle applicatio
 ### Suggested Prompt
 
 ```text
-Use authenticated Wrangler CLI and the Cloudflare API or MCP to deploy this repository as a passkey identity provider for Cloudflare Access:
+Use the authenticated `cf` CLI and the Cloudflare API or MCP to deploy this repository as a passkey identity provider for Cloudflare Access:
 
 https://github.com/andesco/cloudflare-access-passkeys-kit
 
@@ -36,7 +36,7 @@ Workers & Pages → [**Create application**](https://dash.cloudflare.com/?to=/:a
 https://github.com/andesco/cloudflare-access-passkeys-kit
 ```
 
-Cloudflare automatically provisions and binds D1 from the draft `DB` binding in `wrangler.jsonc`. The deploy script applies the included schema migration immediately after the Worker is created; do not create a database manually or add an account-specific database ID to the repository.
+Cloudflare automatically provisions and binds D1 from the draft `DB` binding in `cloudflare.config.ts`. After the Worker is created, apply the included schema migration with `D1_DATABASE_ID={database-id} bun run migrate` (find the ID with `bunx cf d1 list`). Do not add an account-specific database ID to the repository.
 
 During setup, provide two different high-entropy secrets:
 
@@ -51,14 +51,14 @@ Set the non-secret `APP_NAME` variable to the user-facing application name shown
 
 Set the non-secret `PUBLIC_ORIGIN` variable to the Worker’s public origin, such as `https://auth.example.com`. When set, the Worker uses it for the WebAuthn relying party, OIDC issuer, and invitation links, and answers every other hostname (including `*.workers.dev`, and so the admin channel on it) with 404. When empty, the origin of each request is used.
 
-### Wrangler CLI
+### `cf` CLI
 
 ```bash
 git clone https://github.com/andesco/cloudflare-access-passkeys-kit.git
 cd cloudflare-access-passkeys-kit
 bun install
-bunx wrangler whoami
-bun run deploy
+bunx cf auth login
+D1_DATABASE_ID={database-id} bun run deploy
 bunx wrangler secret put BETTER_AUTH_SECRET
 bunx wrangler secret put ADMIN_TOKEN
 ```
@@ -209,11 +209,11 @@ AUTH_ADMIN_TOKEN=your-local-admin-token \
 bun run admin migrate
 ```
 
-The working `.dev.vars` file and Wrangler state are gitignored.
+The working `.dev.vars` file and the generated `.cloudflare/` directory are gitignored.
 
-### Personal Configuration: `wrangler.local.jsonc`
+### Personal Configuration: `cloudflare.local.ts`
 
-Keep account-specific resource IDs, routes, sender restrictions, application name, and feature choices in `wrangler.local.jsonc`. That filename is gitignored so the committed `wrangler.jsonc` remains reusable and ID-free. Wrangler config files do not inherit from `wrangler.jsonc`, so repeat `APP_NAME` in the personal config; it controls the invitation sender display name as well as the UI. This repository’s personal config disables Turnstile and binds the existing production D1 database explicitly.
+Keep the account-specific Worker name, custom domain, D1 database ID, sender restrictions, application name, and feature choices in `cloudflare.local.ts` (copy `cloudflare.local.example.ts`). That filename is gitignored so the committed `cloudflare.config.ts` remains reusable and ID-free. `cloudflare.config.ts` loads it only under `--mode personal`, which the `*:local` scripts pass.
 
 Use the committed Bun scripts so every personal operation selects the local config consistently:
 
@@ -226,13 +226,13 @@ bun run deploy:local
 
 ### Verification
 
-`bun run check` builds the browser client, verifies generated Worker binding types, type-checks TypeScript, and runs a Wrangler deployment dry run. `bun test` runs the unit and integration tests against an in-memory SQLite database that stands in for D1, including a check that `migrations/` still satisfies the schema Better Auth expects. GitHub Actions runs both on every push and pull request.
+`bun run check` builds the browser client, verifies generated Worker binding types, type-checks TypeScript, and runs a `cf deploy` dry run. `bun test` runs the unit and integration tests against an in-memory SQLite database that stands in for D1, including a check that `migrations/` still satisfies the schema Better Auth expects. GitHub Actions runs both on every push and pull request.
 
 `public/assets/client.js` is a build artifact and is gitignored; every `dev`, `check`, and `deploy` script regenerates it.
 
 ```bash
 bun run check
-bun run check:local # when wrangler.local.jsonc exists
+bun run check:local # when cloudflare.local.ts exists
 bun test
 ```
 
