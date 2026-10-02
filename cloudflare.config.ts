@@ -1,4 +1,4 @@
-import { bindings, defineConfig } from "cf/config";
+import { bindings, defineConfig, triggers } from "cf/config";
 
 /**
  * Deployment-specific values (Worker name, custom domain, D1 database, sender allowlist, vars) live in
@@ -26,6 +26,7 @@ export default defineConfig(async ({ mode }) => {
       compatibilityDate: "2026-07-16",
       compatibilityFlags: ["nodejs_compat"],
       entrypoint: "src/index.ts",
+      triggers: [triggers.scheduled({ schedule: "17 4 * * *" })],
       ...(personal.domains ? { domains: personal.domains, workersDev: false, previewUrls: false } : {}),
       observability: {
         enabled: true,

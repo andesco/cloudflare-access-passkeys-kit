@@ -3,6 +3,7 @@ import { handleAdmin } from "./admin-api";
 import { ADMIN_BASE_PATH, appName, configuredOrigin } from "./constants";
 import { handleInvitationRequest } from "./invitation-request";
 import { invitationRegistrationComplete } from "./invitations";
+import { cleanup } from "./cleanup";
 import { redactPath } from "./redact";
 
 function redirect(location: string): Response {
@@ -128,5 +129,16 @@ export default {
       }));
       return Response.json({ error: "Internal server error" }, { status: 500 });
     }
+  },
+  async scheduled(_controller, env, ctx): Promise<void> {
+    ctx.waitUntil(
+      cleanup(env.DB).then(
+        (result) => console.log(JSON.stringify({ message: "cleanup complete", ...result })),
+        (error) => console.error(JSON.stringify({
+          message: "cleanup failed",
+          error: error instanceof Error ? error.message : String(error),
+        })),
+      ),
+    );
   },
 } satisfies ExportedHandler<Env>;

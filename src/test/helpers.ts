@@ -22,9 +22,9 @@ class Statement {
     return { results: this.db.prepare(this.sql).all(...(this.params as never[])) as T[], success: true };
   }
 
-  async run(): Promise<{ success: true; results: [] }> {
-    this.db.prepare(this.sql).run(...(this.params as never[]));
-    return { success: true, results: [] };
+  async run(): Promise<{ success: true; results: []; meta: { changes: number } }> {
+    const { changes } = this.db.prepare(this.sql).run(...(this.params as never[]));
+    return { success: true, results: [], meta: { changes } };
   }
 }
 
