@@ -1,8 +1,9 @@
-import { createAuth } from "./auth";
+import { createAuth, type Auth } from "./auth";
 import { handleAdmin } from "./admin-api";
-import { ADMIN_BASE_PATH, appName } from "./constants";
+import { ADMIN_BASE_PATH, appName, configuredOrigin } from "./constants";
 import { handleInvitationRequest } from "./invitation-request";
 import { invitationRegistrationComplete } from "./invitations";
+import { redactPath } from "./redact";
 
 function redirect(location: string): Response {
   return new Response(null, {
@@ -49,15 +50,19 @@ async function pageAsset(request: Request, env: Env, pathname: string): Promise<
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
-    const auth = createAuth(env, request);
+    // Build Better Auth only for routes that need it.
+    let auth: Auth | undefined;
+    const getAuth = (): Auth => (auth ??= createAuth(env, request));
 
     try {
+      const origin = configuredOrigin(env);
+      if (origin && url.origin !== origin) return notFound();
       if (url.pathname === "/health") return Response.json({ ok: true });
       if (url.pathname.endsWith(".html")) return notFound();
       if (url.pathname === "/") return await pageAsset(request, env, "/sign-in.html");
       if (url.pathname === "/sign-in") return redirect(`/${url.search}`);
       if (url.pathname === "/api/invitations/request") {
-        return await handleInvitationRequest(request, env, auth, ctx);
+        return await handleInvitationRequest(request, env, getAuth, ctx);
       }
       if (url.pathname === "/api/config") {
         const turnstileEnabled = env.TURNSTILE_ENABLED === "true";
@@ -85,9 +90,9 @@ export default {
         if (!token || token.includes("/")) return notFound();
         return await pageAsset(request, env, "/invite.html");
       }
-      if (url.pathname.startsWith(ADMIN_BASE_PATH)) return await handleAdmin(request, env, auth);
+      if (url.pathname.startsWith(ADMIN_BASE_PATH)) return await handleAdmin(request, env, getAuth);
       if (url.pathname === "/.well-known/openid-configuration") {
-        return Response.json(await auth.api.getOpenIdConfig(), {
+        return Response.json(await getAuth().api.getOpenIdConfig(), {
           headers: { "cache-control": "public, max-age=300" },
         });
       }
@@ -95,12 +100,12 @@ export default {
         url.pathname === "/.well-known/oauth-authorization-server" ||
         url.pathname === "/.well-known/oauth-authorization-server/api/auth"
       ) {
-        return Response.json(await auth.api.getOAuthServerConfig(), {
+        return Response.json(await getAuth().api.getOAuthServerConfig(), {
           headers: { "cache-control": "public, max-age=300" },
         });
       }
       if (url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/.well-known/")) {
-        return await auth.handler(request);
+        return await getAuth().handler(request);
       }
       return await env.ASSETS.fetch(request);
     } catch (error) {
@@ -118,7 +123,7 @@ export default {
           : { kind: typeof error, value: String(error) };
       console.error(JSON.stringify({
         message: "request failed",
-        path: url.pathname,
+        path: redactPath(url.pathname),
         error: details,
       }));
       return Response.json({ error: "Internal server error" }, { status: 500 });

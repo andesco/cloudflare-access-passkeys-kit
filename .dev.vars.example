@@ -6,5 +6,6 @@ CLOUDFLARE_API_TOKEN=restricted-access-apps-and-policies-read-token
 TURNSTILE_SITE_KEY=your-turnstile-site-key
 TURNSTILE_SECRET_KEY=your-turnstile-secret-key
 INVITATION_FROM=auth@send.example.com
-APP_NAME=andrewe.dev
+APP_NAME=Cloudflare Access Passkeys Kit
 TURNSTILE_ENABLED=true
+PUBLIC_ORIGIN=

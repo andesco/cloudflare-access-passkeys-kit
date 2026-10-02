@@ -2,6 +2,9 @@ import { getMigrations } from "better-auth/db/migration";
 import { makeSignature } from "better-auth/crypto";
 import { ADMIN_BASE_PATH, requestOrigin } from "./constants";
 import { randomToken, sha256Hex, timingSafeEqual } from "./crypto";
+import { upsertInvitation } from "./invitations";
+import { INVITATION_SCHEMA_STATEMENTS } from "./schema";
+import { normalizeEmail } from "./validation";
 import type { Auth } from "./auth";
 
 const jsonHeaders = { "cache-control": "no-store" };
@@ -28,28 +31,20 @@ async function readJson(request: Request): Promise<Record<string, unknown>> {
 async function migrate(auth: Auth, db: D1Database): Promise<Response> {
   const migrations = await getMigrations(auth.options);
   await migrations.runMigrations();
-  await db.batch([
-    db.prepare(`CREATE TABLE IF NOT EXISTS invitation (
-      id TEXT PRIMARY KEY NOT NULL,
-      token_hash TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      user_id TEXT NOT NULL UNIQUE REFERENCES user(id) ON DELETE CASCADE,
-      expires_at INTEGER NOT NULL,
-      used_at INTEGER,
-      revoked_at INTEGER,
-      created_at INTEGER NOT NULL
-    )`),
-    db.prepare(`CREATE INDEX IF NOT EXISTS invitation_status_idx
-      ON invitation (used_at, revoked_at, expires_at)`),
-  ]);
+  await db.batch(INVITATION_SCHEMA_STATEMENTS.map((statement) => db.prepare(statement)));
   return json({ ok: true });
 }
 
-async function createInvite(request: Request, auth: Auth, db: D1Database): Promise<Response> {
+async function createInvite(
+  request: Request,
+  env: Env,
+  auth: Auth,
+  db: D1Database,
+): Promise<Response> {
   const body = await readJson(request);
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const email = normalizeEmail(body.email);
   const days = typeof body.days === "number" ? body.days : 7;
-  if (!/^\S+@\S+\.\S+$/u.test(email)) return json({ error: "A valid email is required" }, 400);
+  if (!email) return json({ error: "A valid email is required" }, 400);
   if (!Number.isInteger(days) || days < 1 || days > 30) {
     return json({ error: "days must be an integer from 1 to 30" }, 400);
   }
@@ -89,7 +84,7 @@ async function createInvite(request: Request, auth: Auth, db: D1Database): Promi
     id: invitation.id,
     email,
     expiresAt: new Date(invitation.expiresAt).toISOString(),
-    url: `${requestOrigin(request)}/invite/${token}`,
+    url: `${requestOrigin(env, request)}/invite/${token}`,
   }, 201);
 }
 
@@ -127,11 +122,16 @@ async function revokeInvite(id: string, auth: Auth, db: D1Database): Promise<Res
   return json({ ok: true });
 }
 
-async function recoverUser(request: Request, auth: Auth, db: D1Database): Promise<Response> {
+async function recoverUser(
+  request: Request,
+  env: Env,
+  auth: Auth,
+  db: D1Database,
+): Promise<Response> {
   const body = await readJson(request);
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const email = normalizeEmail(body.email);
   const days = typeof body.days === "number" ? body.days : 1;
-  if (!/^\S+@\S+\.\S+$/u.test(email)) return json({ error: "A valid email is required" }, 400);
+  if (!email) return json({ error: "A valid email is required" }, 400);
   if (!Number.isInteger(days) || days < 1 || days > 7) {
     return json({ error: "days must be an integer from 1 to 7" }, 400);
   }
@@ -145,32 +145,31 @@ async function recoverUser(request: Request, auth: Auth, db: D1Database): Promis
   const now = Date.now();
   const expiresAt = now + days * 86_400_000;
   await db.batch([
+    db.prepare("DELETE FROM oauthAccessToken WHERE userId = ?1").bind(existing.user.id),
+    db.prepare("DELETE FROM oauthRefreshToken WHERE userId = ?1").bind(existing.user.id),
     db.prepare("DELETE FROM session WHERE userId = ?1").bind(existing.user.id),
     db.prepare("DELETE FROM passkey WHERE userId = ?1").bind(existing.user.id),
-    db.prepare(
-      `INSERT INTO invitation
-        (id, token_hash, email, user_id, expires_at, used_at, revoked_at, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6)
-       ON CONFLICT(user_id) DO UPDATE SET
-         token_hash = excluded.token_hash,
-         email = excluded.email,
-         expires_at = excluded.expires_at,
-         used_at = NULL,
-         revoked_at = NULL,
-         created_at = excluded.created_at`,
-    ).bind(crypto.randomUUID(), tokenHash, email, existing.user.id, expiresAt, now),
+    upsertInvitation(db, {
+      id: crypto.randomUUID(),
+      tokenHash,
+      email,
+      userId: existing.user.id,
+      expiresAt,
+      createdAt: now,
+    }),
   ]);
 
   return json({
     email,
     expiresAt: new Date(expiresAt).toISOString(),
-    url: `${requestOrigin(request)}/invite/${token}`,
+    url: `${requestOrigin(env, request)}/invite/${token}`,
     warning: "All existing passkeys and sessions were revoked.",
   });
 }
 
 async function provisionClient(
   request: Request,
+  env: Env,
   auth: Auth,
   db: D1Database,
 ): Promise<Response> {
@@ -222,7 +221,7 @@ async function provisionClient(
     client,
     cloudflareAccess: {
       redirectUri,
-      discoveryUrl: `${requestOrigin(request)}/.well-known/openid-configuration`,
+      discoveryUrl: `${requestOrigin(env, request)}/.well-known/openid-configuration`,
       pkceEnabled: true,
       scopes: ["openid", "email", "profile"],
       emailClaimName: "email",
@@ -246,27 +245,28 @@ async function showClient(db: D1Database): Promise<Response> {
 export async function handleAdmin(
   request: Request,
   env: Env,
-  auth: Auth,
+  getAuth: () => Auth,
 ): Promise<Response> {
   if (!(await authorize(request, env.ADMIN_TOKEN))) {
     return json({ error: "Unauthorized" }, 401);
   }
+  const auth = getAuth();
 
   const url = new URL(request.url);
   const path = url.pathname.slice(ADMIN_BASE_PATH.length);
   if (request.method === "POST" && path === "/migrate") return migrate(auth, env.DB);
   if (request.method === "POST" && path === "/invitations") {
-    return createInvite(request, auth, env.DB);
+    return createInvite(request, env, auth, env.DB);
   }
   if (request.method === "GET" && path === "/invitations") return listInvites(env.DB);
   if (request.method === "DELETE" && path.startsWith("/invitations/")) {
     return revokeInvite(decodeURIComponent(path.slice("/invitations/".length)), auth, env.DB);
   }
   if (request.method === "POST" && path === "/users/recover") {
-    return recoverUser(request, auth, env.DB);
+    return recoverUser(request, env, auth, env.DB);
   }
   if (request.method === "POST" && path === "/client") {
-    return provisionClient(request, auth, env.DB);
+    return provisionClient(request, env, auth, env.DB);
   }
   if (request.method === "GET" && path === "/client") return showClient(env.DB);
   return json({ error: "Not found" }, 404);

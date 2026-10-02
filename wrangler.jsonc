@@ -5,8 +5,9 @@
   "compatibility_date": "2026-07-16",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "APP_NAME": "andrewe.dev",
-    "TURNSTILE_ENABLED": "true"
+    "APP_NAME": "Cloudflare Access Passkeys Kit",
+    "TURNSTILE_ENABLED": "true",
+    "PUBLIC_ORIGIN": ""
   },
   "assets": {
     "binding": "ASSETS",

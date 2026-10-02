@@ -7,7 +7,7 @@ import { appName, requestOrigin } from "./constants";
 import { consumeInvitation, resolveInvitation } from "./invitations";
 
 export function createAuth(env: Env, request: Request) {
-  const origin = requestOrigin(request);
+  const origin = requestOrigin(env, request);
   const rpID = new URL(origin).hostname;
   const name = appName(env);
 

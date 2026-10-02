@@ -1,6 +1,5 @@
 import { APIError } from "better-auth/api";
-import { sha256Hex } from "./crypto";
-import { randomToken } from "./crypto";
+import { randomToken, sha256Hex } from "./crypto";
 import type { Auth } from "./auth";
 
 export interface InvitationRow {
@@ -75,6 +74,40 @@ export async function invitationRegistrationComplete(db: D1Database, token: stri
   return Boolean(result);
 }
 
+/** Creates or resets the single invitation row for a user. Shared by email requests and CLI recovery. */
+export function upsertInvitation(
+  db: D1Database,
+  invitation: {
+    id: string;
+    tokenHash: string;
+    email: string;
+    userId: string;
+    expiresAt: number;
+    createdAt: number;
+  },
+): D1PreparedStatement {
+  return db.prepare(
+    `INSERT INTO invitation
+      (id, token_hash, email, user_id, expires_at, used_at, revoked_at, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6)
+     ON CONFLICT(user_id) DO UPDATE SET
+       token_hash = excluded.token_hash,
+       email = excluded.email,
+       expires_at = excluded.expires_at,
+       used_at = NULL,
+       revoked_at = NULL,
+       created_at = excluded.created_at
+     RETURNING id`,
+  ).bind(
+    invitation.id,
+    invitation.tokenHash,
+    invitation.email,
+    invitation.userId,
+    invitation.expiresAt,
+    invitation.createdAt,
+  );
+}
+
 export async function issueInvitation(
   auth: Auth,
   db: D1Database,
@@ -100,20 +133,14 @@ export async function issueInvitation(
   const now = Date.now();
   const expiresAt = now + days * 86_400_000;
   try {
-    const invitation = await db.prepare(
-      `INSERT INTO invitation
-        (id, token_hash, email, user_id, expires_at, used_at, revoked_at, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6)
-       ON CONFLICT(user_id) DO UPDATE SET
-         token_hash = excluded.token_hash,
-         email = excluded.email,
-         expires_at = excluded.expires_at,
-         used_at = NULL,
-         revoked_at = NULL,
-         created_at = excluded.created_at
-       RETURNING id`,
-    ).bind(crypto.randomUUID(), await sha256Hex(token), email, user.id, expiresAt, now)
-      .first<{ id: string }>();
+    const invitation = await upsertInvitation(db, {
+      id: crypto.randomUUID(),
+      tokenHash: await sha256Hex(token),
+      email,
+      userId: user.id,
+      expiresAt,
+      createdAt: now,
+    }).first<{ id: string }>();
     if (!invitation) throw new Error("Invitation creation returned no record");
     return { id: invitation.id, token, expiresAt, createdAt: now };
   } catch (error) {
