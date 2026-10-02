@@ -1,10 +1,11 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
+import { APIError, getSessionFromCtx } from "better-auth/api";
 import { jwt } from "better-auth/plugins";
 import { appName, requestOrigin } from "./constants";
 import { consumeInvitation, resolveInvitation } from "./invitations";
+import { assertCanAddPasskey, notifyPasskeyChange, passkeyManagementHook } from "./passkey-management";
 
 export function createAuth(env: Env, request: Request) {
   const origin = requestOrigin(env, request);
@@ -18,6 +19,7 @@ export function createAuth(env: Env, request: Request) {
     database: env.DB,
     trustedOrigins: [origin],
     emailAndPassword: { enabled: false },
+    hooks: { before: passkeyManagementHook(env) },
     advanced: {
       database: { generateId: "uuid" },
       useSecureCookies: true,
@@ -48,17 +50,33 @@ export function createAuth(env: Env, request: Request) {
               displayName: invitation.email,
             };
           },
-          afterVerification: async ({ context, verification, user }) => {
+          afterVerification: async ({ ctx, context, verification, user }) => {
             if (!verification.registrationInfo?.userVerified) {
               throw new APIError("UNAUTHORIZED", { message: "User verification is required" });
             }
             if (!context) {
-              throw new APIError("FORBIDDEN", { message: "A valid invitation is required" });
+              // No invitation: only a signed-in user may add another passkey to their own account.
+              const session = await getSessionFromCtx(ctx);
+              if (!session || session.user.id !== user.id) {
+                throw new APIError("FORBIDDEN", { message: "A valid invitation is required" });
+              }
+              const passkeys = await ctx.context.adapter.findMany({
+                model: "passkey",
+                where: [{ field: "userId", value: user.id }],
+              });
+              assertCanAddPasskey({
+                sessionCreatedAt: session.session.createdAt,
+                passkeyCount: passkeys.length,
+              });
+              await notifyPasskeyChange(env, session.user.email, "added");
+              return { name: session.user.email };
             }
-            const invitation = await consumeInvitation(env.DB, context);
-            if (invitation.user_id !== user.id) {
+            // Validate ownership before consuming so a mismatched invitation is not burned.
+            const pending = await resolveInvitation(env.DB, context);
+            if (pending.user_id !== user.id) {
               throw new APIError("FORBIDDEN", { message: "Invitation does not match this user" });
             }
+            const invitation = await consumeInvitation(env.DB, context);
             return { name: invitation.email };
           },
         },

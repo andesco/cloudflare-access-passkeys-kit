@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { makeSignature } from "better-auth/crypto";
 import { createAuth } from "../auth";
 
 class Statement {
@@ -74,4 +75,30 @@ export function testEnv(db: Database, overrides: Partial<Env> = {}): Env {
 /** Better Auth gets the raw sqlite handle; the app's D1 calls share the same connection. */
 export function testAuth(db: Database, env: Env) {
   return createAuth({ ...env, DB: db as unknown as D1Database }, new Request(`${ORIGIN}/`));
+}
+
+/** Creates a user with passkeys and a signed session cookie created `sessionAgeMs` ago. */
+export async function signedInUser(
+  db: Database,
+  auth: ReturnType<typeof testAuth>,
+  options: { email?: string; passkeys?: number; sessionAgeMs?: number } = {},
+) {
+  const email = options.email ?? "person@example.com";
+  const context = await auth.$context;
+  const user = await context.internalAdapter.createUser({ email, name: email, emailVerified: true });
+  const ids: string[] = [];
+  for (let index = 0; index < (options.passkeys ?? 2); index += 1) {
+    const id = `${options.email ? `${options.email.split("@")[0]}-` : ""}pk-${index}`;
+    ids.push(id);
+    db.exec(`INSERT INTO passkey (id, name, publicKey, userId, credentialID, counter, deviceType, backedUp)
+      VALUES ('${id}', '${email}', 'k', '${user.id}', 'cred-${id}', 0, 'singleDevice', 0)`);
+  }
+  const session = await context.internalAdapter.createSession(user.id);
+  if (options.sessionAgeMs) {
+    db.exec(`UPDATE session SET createdAt = '${new Date(Date.now() - options.sessionAgeMs).toISOString()}'
+      WHERE id = '${session.id}'`);
+  }
+  const signature = await makeSignature(session.token, context.secret);
+  const cookie = `${context.authCookies.sessionToken.name}=${session.token}.${signature}`;
+  return { user, passkeyIds: ids, headers: new Headers({ cookie }) };
 }
