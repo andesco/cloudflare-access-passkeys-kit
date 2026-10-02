@@ -54,6 +54,10 @@ export async function readRequest(
 }
 
 async function verifyTurnstile(env: Env, token: string, request: Request): Promise<boolean> {
+  if (!env.TURNSTILE_SECRET_KEY) {
+    console.error(JSON.stringify({ message: "TURNSTILE_ENABLED is true but TURNSTILE_SECRET_KEY is not set" }));
+    return false;
+  }
   const body = new URLSearchParams({ secret: env.TURNSTILE_SECRET_KEY, response: token });
   const remoteIp = request.headers.get("cf-connecting-ip");
   if (remoteIp) body.set("remoteip", remoteIp);

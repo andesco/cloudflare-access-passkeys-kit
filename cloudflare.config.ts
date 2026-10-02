@@ -51,13 +51,13 @@ export default defineConfig(async ({ mode }) => {
           simple: { limit: 5, period: 60 },
         }),
         ASSETS: bindings.assets(),
+        // TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY are optional secrets (see src/env.d.ts), so they are
+        // not declared here: declared secrets are required for a deploy to succeed.
         BETTER_AUTH_SECRET: bindings.secret(),
         ADMIN_TOKEN: bindings.secret(),
         CLOUDFLARE_ACCOUNT_ID: bindings.secret(),
         ACCESS_POLICY_ID: bindings.secret(),
         CLOUDFLARE_API_TOKEN: bindings.secret(),
-        TURNSTILE_SITE_KEY: bindings.secret(),
-        TURNSTILE_SECRET_KEY: bindings.secret(),
         INVITATION_FROM: bindings.secret(),
       },
     },
