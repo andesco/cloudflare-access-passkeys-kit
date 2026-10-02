@@ -47,7 +47,9 @@ Generate each value independently with `openssl rand -hex 32`.
 
 These deployment-specific values are requested as bindings: `CLOUDFLARE_ACCOUNT_ID`, `ACCESS_POLICY_ID`, `CLOUDFLARE_API_TOKEN`, and `INVITATION_FROM`. `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are required only when `TURNSTILE_ENABLED` is `"true"`.
 
-Set the non-secret `APP_NAME` variable to the user-facing application name shown on the sign-in and enrollment pages, passkey prompt, and invitation email. The committed deployment uses `andrewe.dev`.
+Set the non-secret `APP_NAME` variable to the user-facing application name shown on the sign-in and enrollment pages, passkey prompt, and invitation email. It defaults to “Cloudflare Access Passkeys Kit”.
+
+Set the non-secret `PUBLIC_ORIGIN` variable to the Worker’s public origin, such as `https://auth.example.com`. When set, the Worker uses it for the WebAuthn relying party, OIDC issuer, and invitation links, and answers every other hostname (including `*.workers.dev`, and so the admin channel on it) with 404. When empty, the origin of each request is used.
 
 ### Wrangler CLI
 
@@ -173,7 +175,7 @@ bun run admin invite create person@example.com --days 2
 bun run admin invite list
 bun run admin invite revoke {invitation-id}
 
-# Lost-passkey recovery; revokes every passkey and session first
+# Lost-passkey recovery; revokes every passkey, session, and OAuth token first
 bun run admin user recover person@example.com --days 1
 
 # Provision and inspect the sole OIDC client
@@ -224,7 +226,9 @@ bun run deploy:local
 
 ### Verification
 
-`bun run check` builds the browser client, verifies generated Worker binding types, type-checks TypeScript, and runs a Wrangler deployment dry run.
+`bun run check` builds the browser client, verifies generated Worker binding types, type-checks TypeScript, and runs a Wrangler deployment dry run. `bun test` runs the unit and integration tests against an in-memory SQLite database that stands in for D1, including a check that `migrations/` still satisfies the schema Better Auth expects. GitHub Actions runs both on every push and pull request.
+
+`public/assets/client.js` is a build artifact and is gitignored; every `dev`, `check`, and `deploy` script regenerates it.
 
 ```bash
 bun run check
