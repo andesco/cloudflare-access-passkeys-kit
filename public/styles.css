@@ -214,13 +214,6 @@ h1 {
   flex-shrink: 0;
 }
 
-.provider-button .sign-out-icon {
-  width: 26px;
-  height: 20px;
-  flex-shrink: 0;
-  object-fit: contain;
-}
-
 .primary-button {
   border-color: color-mix(in oklch, var(--brand), black 10%);
   background: linear-gradient(to bottom, color-mix(in oklch, var(--brand), white 15%), var(--brand));
