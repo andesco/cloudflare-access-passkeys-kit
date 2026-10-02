@@ -131,6 +131,14 @@ Registration creates an email-bound, discoverable passkey: the verified invitati
 
 The email is not embedded in the public key or exposed through JWKS, but the user’s passkey manager may display it for account identification.
 
+### Managing passkeys
+
+After signing in, a user can add more passkeys (up to 10), rename them, and remove them from the sign-in page. Adding or removing a passkey requires a passkey sign-in within the last five minutes; the page asks the user to confirm with a passkey and retries. The last remaining passkey cannot be removed, and every add or remove sends a notice to the account email. Lost-passkey recovery through the CLI is still needed when a user has no working passkey.
+
+### Scheduled cleanup
+
+A daily cron trigger (04:17 UTC) deletes expired passkey challenges, sessions, and OAuth tokens, and users whose invitation expired unused or was revoked at least 30 days ago and who never registered a passkey. Worker logs record each run as `cleanup complete`.
+
 ## Responsibility Boundary
 
 **Cloudflare Access Passkeys Kit**

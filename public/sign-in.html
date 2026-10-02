@@ -57,6 +57,17 @@
                 <dd id="signed-in-created-at"></dd>
               </div>
             </dl>
+            <section class="passkey-manager" aria-labelledby="passkeys-heading">
+              <h2 id="passkeys-heading">Passkeys</h2>
+              <ul id="passkey-list" class="passkey-list"></ul>
+              <button id="add-passkey-action" class="provider-button" type="button">
+                <svg aria-hidden="true" viewBox="0 -960 960 960" fill="currentColor">
+                  <path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z"></path>
+                </svg>
+                <span>Add a passkey</span>
+              </button>
+              <output id="passkey-status" aria-live="polite"></output>
+            </section>
             <button id="sign-out-action" class="provider-button" type="button">
               <img class="sign-out-icon" src="/assets/rectangle.portrait.and.arrow.right-regular.svg" alt="">
               <span>Sign out</span>

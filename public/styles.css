@@ -394,3 +394,74 @@ output[data-error="true"] { color: var(--danger); }
     transition-duration: 0.01ms !important;
   }
 }
+
+.passkey-manager {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing);
+}
+
+.passkey-manager h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--subtle);
+}
+
+.passkey-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.passkey-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  font-size: 13px;
+}
+
+.passkey-list .passkey-name {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.passkey-list .passkey-meta {
+  display: block;
+  color: var(--subtle);
+  font-weight: 400;
+}
+
+.passkey-list button {
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: var(--base);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.passkey-list button:hover:not(:disabled) { background: var(--tint); }
+
+.passkey-list button:disabled {
+  color: var(--subtle);
+  cursor: not-allowed;
+}
+
+#passkey-status {
+  min-height: 18px;
+  font-size: 13px;
+  color: var(--subtle);
+}
+
+#passkey-status[data-error="true"] { color: #b42318; }

@@ -10,6 +10,8 @@ Cloudflare Access Passkeys Kit has the following security properties:
 - Resident credentials and user verification are required. The WebAuthn verification result is checked explicitly for the UV flag.
 - Sign-in is usernameless and opens the browser or operating system’s account chooser for discoverable passkeys.
 - Passkeys are email-bound: they are labeled with the policy-authorized invitation email instead of a generic “Primary passkey” name.
+- Signed-in users may add, rename and remove their own passkeys. Adding or removing requires a passkey sign-in within five minutes, the last passkey cannot be removed, at most 10 are allowed, and each change emails the account owner. These checks guard Better Auth's own delete and update endpoints as well as registration.
+- A daily cron trigger removes expired challenges, sessions, OAuth tokens and users abandoned after an unused invitation.
 - Dynamic OAuth client registration and user-managed OAuth client CRUD are disabled.
 - Exactly one confidential OIDC client can be provisioned. It requires PKCE, skips consent, and supports only the authorization-code grant.
 - OIDC ID tokens use RS256 because Cloudflare Access does not support Better Auth’s default Ed25519/OKP signing keys. The included migration removes incompatible legacy keys when upgrading an existing deployment so Better Auth can generate an RSA key.

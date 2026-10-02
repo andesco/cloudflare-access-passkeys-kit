@@ -11,9 +11,19 @@ interface PublicConfig {
 }
 
 interface PasskeyCredential {
+  id: string;
+  name?: string | null;
   credentialID: string;
   createdAt?: string;
+  backedUp?: boolean;
 }
+
+type ActionResult = { error?: { message?: string } | null } | null | undefined;
+
+// Must match RECENT_SIGN_IN_MESSAGE in src/passkey-management.ts.
+const RECENT_SIGN_IN_MESSAGE = "Recent sign-in required";
+
+let currentCredentialID: string | undefined;
 
 let publicConfigPromise: Promise<PublicConfig> | undefined;
 
@@ -64,16 +74,94 @@ function sharedApplicationName(): string | undefined {
   }
 }
 
-async function credentialDetails(credentialID?: string): Promise<PasskeyCredential | undefined> {
-  if (!credentialID) return undefined;
+async function listPasskeys(): Promise<PasskeyCredential[]> {
   try {
     const response = await fetch("/api/auth/passkey/list-user-passkeys");
-    if (!response.ok) return undefined;
-    const passkeys = await response.json() as PasskeyCredential[];
-    return passkeys.find((item) => item.credentialID === credentialID);
+    return response.ok ? await response.json() as PasskeyCredential[] : [];
   } catch {
-    return undefined;
+    return [];
   }
+}
+
+function setPasskeyStatus(message: string, error = false): void {
+  const status = element<HTMLOutputElement>("passkey-status");
+  status.textContent = message;
+  status.dataset.error = String(error);
+}
+
+/** Runs a passkey change; if the session is too old, asks for a passkey and retries once. */
+async function withRecentSignIn(action: () => Promise<ActionResult>): Promise<ActionResult> {
+  const result = await action();
+  if (!result?.error?.message?.includes(RECENT_SIGN_IN_MESSAGE)) return result;
+  setPasskeyStatus("Confirm it's you with a passkey…");
+  const signedIn = await auth.signIn.passkey({ returnWebAuthnResponse: true });
+  if (!signedIn || signedIn.error) return signedIn ?? result;
+  if ("webauthn" in signedIn) currentCredentialID = signedIn.webauthn.response.id;
+  return await action();
+}
+
+async function changePasskey(action: () => Promise<ActionResult>, success: string): Promise<void> {
+  setPasskeyStatus("Waiting for your passkey…");
+  const result = await withRecentSignIn(action);
+  if (result?.error) {
+    setPasskeyStatus(result.error.message ?? "That change could not be made.", true);
+  } else {
+    setPasskeyStatus(success);
+  }
+  await renderPasskeys();
+}
+
+function passkeyItem(passkey: PasskeyCredential, canRemove: boolean): HTMLLIElement {
+  const item = document.createElement("li");
+  const label = document.createElement("span");
+  label.className = "passkey-name";
+  label.textContent = passkey.name?.trim() || "Passkey";
+  const meta = document.createElement("span");
+  meta.className = "passkey-meta";
+  meta.textContent = [
+    isoDate(passkey.createdAt) ? `Added ${isoDate(passkey.createdAt)}` : undefined,
+    passkey.backedUp ? "Synced" : "This device only",
+    passkey.credentialID === currentCredentialID ? "Current" : undefined,
+  ].filter(Boolean).join(" · ");
+  label.appendChild(meta);
+
+  const actions = document.createElement("span");
+  const rename = document.createElement("button");
+  rename.type = "button";
+  rename.textContent = "Rename";
+  rename.onclick = () => {
+    const name = window.prompt("Passkey name", passkey.name ?? "")?.trim();
+    if (name) {
+      void changePasskey(() => auth.passkey.updatePasskey({ id: passkey.id, name }), "Passkey renamed.");
+    }
+  };
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = "Remove";
+  remove.disabled = !canRemove;
+  remove.title = canRemove ? "" : "You cannot remove your only passkey";
+  remove.onclick = () => {
+    if (window.confirm("Remove this passkey? You will no longer be able to sign in with it.")) {
+      void changePasskey(() => auth.passkey.deletePasskey({ id: passkey.id }), "Passkey removed.");
+    }
+  };
+  actions.appendChild(rename);
+  actions.appendChild(document.createTextNode(" "));
+  actions.appendChild(remove);
+  item.appendChild(label);
+  item.appendChild(actions);
+  return item;
+}
+
+async function renderPasskeys(): Promise<void> {
+  const passkeys = await listPasskeys();
+  element<HTMLUListElement>("passkey-list").replaceChildren(
+    ...passkeys.map((passkey) => passkeyItem(passkey, passkeys.length > 1)),
+  );
+}
+
+async function addPasskey(): Promise<void> {
+  await changePasskey(() => auth.passkey.addPasskey(), "Passkey added.");
 }
 
 function setSignedInDetail(name: string, value?: string): void {
@@ -88,17 +176,20 @@ function isoDate(value?: string): string | undefined {
 }
 
 async function showSignedInState(credentialID?: string): Promise<void> {
-  const [{ appName }, session, credential] = await Promise.all([
+  if (credentialID) currentCredentialID = credentialID;
+  const [{ appName }, session, passkeys] = await Promise.all([
     getPublicConfig(),
     auth.getSession(),
-    credentialDetails(credentialID),
+    listPasskeys(),
   ]);
+  const credential = passkeys.find((item) => item.credentialID === currentCredentialID);
   const email = session.data?.user.email;
   element<HTMLElement>("sign-in-title").textContent = `Signed in to ${appName}`;
   element<HTMLElement>("signed-in-email").textContent = email ?? "Unknown";
   setSignedInDetail("created-at", isoDate(credential?.createdAt));
   element<HTMLElement>("sign-in-options").hidden = true;
   element<HTMLElement>("signed-in-options").hidden = false;
+  await renderPasskeys();
 }
 
 async function signOut(): Promise<void> {
@@ -292,5 +383,6 @@ if (action === "sign-in" && new URLSearchParams(window.location.search).get("reg
 }
 if (action === "sign-in") {
   element<HTMLButtonElement>("sign-out-action").onclick = () => void signOut();
+  element<HTMLButtonElement>("add-passkey-action").onclick = () => void addPasskey();
   void setupInvitationRequest();
 }
