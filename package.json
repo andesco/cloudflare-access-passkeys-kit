@@ -16,14 +16,14 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@better-auth/oauth-provider": "latest",
-    "@better-auth/passkey": "latest",
-    "better-auth": "latest"
+    "@better-auth/oauth-provider": "1.6.23",
+    "@better-auth/passkey": "1.6.23",
+    "better-auth": "1.6.23"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260716.1",
-    "@types/bun": "latest",
-    "typescript": "latest",
+    "@types/bun": "1.3.14",
+    "typescript": "7.0.2",
     "wrangler": "^4.111.0"
   },
   "cloudflare": {
