@@ -8,3 +8,4 @@ data/
 .wrangler/
 wrangler.local.jsonc
 .DS_Store
+public/assets/client.js
