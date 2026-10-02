@@ -4,10 +4,11 @@ import { betterAuth } from "better-auth";
 import { APIError, getSessionFromCtx } from "better-auth/api";
 import { jwt } from "better-auth/plugins";
 import { appName, requestOrigin } from "./constants";
-import { consumeInvitation, resolveInvitation } from "./invitations";
+import { consumeInvitation, invitationToken, resolveInvitation } from "./invitations";
 import { assertCanAddPasskey, notifyPasskeyChange, passkeyManagementHook } from "./passkey-management";
 
-export function createAuth(env: Env, request: Request) {
+/** `database` overrides the Better Auth adapter handle; tests pass raw SQLite while `env.DB` stays a D1 stand-in. */
+export function createAuth(env: Env, request: Request, database: unknown = env.DB) {
   const origin = requestOrigin(env, request);
   const rpID = new URL(origin).hostname;
   const name = appName(env);
@@ -16,7 +17,7 @@ export function createAuth(env: Env, request: Request) {
     appName: name,
     baseURL: origin,
     secret: env.BETTER_AUTH_SECRET,
-    database: env.DB,
+    database: database as D1Database,
     trustedOrigins: [origin],
     emailAndPassword: { enabled: false },
     hooks: { before: passkeyManagementHook(env) },
@@ -42,19 +43,20 @@ export function createAuth(env: Env, request: Request) {
         },
         registration: {
           requireSession: false,
-          resolveUser: async ({ context }) => {
-            const invitation = await resolveInvitation(env.DB, context);
+          resolveUser: async ({ ctx }) => {
+            const invitation = await resolveInvitation(env.DB, invitationToken(ctx));
             return {
               id: invitation.user_id,
               name: invitation.email,
               displayName: invitation.email,
             };
           },
-          afterVerification: async ({ ctx, context, verification, user }) => {
+          afterVerification: async ({ ctx, verification, user }) => {
+            const token = invitationToken(ctx);
             if (!verification.registrationInfo?.userVerified) {
               throw new APIError("UNAUTHORIZED", { message: "User verification is required" });
             }
-            if (!context) {
+            if (!token) {
               // No invitation: only a signed-in user may add another passkey to their own account.
               const session = await getSessionFromCtx(ctx);
               if (!session || session.user.id !== user.id) {
@@ -72,11 +74,11 @@ export function createAuth(env: Env, request: Request) {
               return { name: session.user.email };
             }
             // Validate ownership before consuming so a mismatched invitation is not burned.
-            const pending = await resolveInvitation(env.DB, context);
+            const pending = await resolveInvitation(env.DB, token);
             if (pending.user_id !== user.id) {
               throw new APIError("FORBIDDEN", { message: "Invitation does not match this user" });
             }
-            const invitation = await consumeInvitation(env.DB, context);
+            const invitation = await consumeInvitation(env.DB, token);
             return { name: invitation.email };
           },
         },

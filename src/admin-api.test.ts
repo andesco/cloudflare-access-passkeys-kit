@@ -43,7 +43,7 @@ describe("admin API", () => {
     expect(created.status).toBe(201);
     const body = await created.json() as { id: string; url: string; email: string };
     expect(body.email).toBe("person@example.com");
-    expect(body.url.startsWith(`${ORIGIN}/invite/`)).toBe(true);
+    expect(body.url.startsWith(`${ORIGIN}/invite#`)).toBe(true);
 
     const listed = await (await call("/invitations")).json() as { invitations: { id: string }[] };
     expect(listed.invitations.map((item) => item.id)).toEqual([body.id]);

@@ -2,6 +2,16 @@ import { APIError } from "better-auth/api";
 import { randomToken, sha256Hex } from "./crypto";
 import type { Auth } from "./auth";
 
+/**
+ * The invitation token travels in this header, never in a URL: the emailed link keeps it in the
+ * fragment (which browsers do not send), and the client copies it into the header on every request.
+ */
+export const INVITATION_HEADER = "x-invitation-token";
+
+export function invitationToken(ctx: { headers?: Headers } | null | undefined): string | null {
+  return ctx?.headers?.get(INVITATION_HEADER) || null;
+}
+
 export interface InvitationRow {
   id: string;
   email: string;

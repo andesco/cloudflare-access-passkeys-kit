@@ -74,7 +74,7 @@ export function testEnv(db: Database, overrides: Partial<Env> = {}): Env {
 
 /** Better Auth gets the raw sqlite handle; the app's D1 calls share the same connection. */
 export function testAuth(db: Database, env: Env) {
-  return createAuth({ ...env, DB: db as unknown as D1Database }, new Request(`${ORIGIN}/`));
+  return createAuth(env, new Request(`${ORIGIN}/`), db);
 }
 
 /** Creates a user with passkeys and a signed session cookie created `sessionAgeMs` ago. */

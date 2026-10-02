@@ -2,13 +2,15 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { sha256Hex } from "./crypto";
 import {
+  INVITATION_HEADER,
   cancelUnsentInvitation,
   consumeInvitation,
   invitationRegistrationComplete,
   issueInvitation,
   resolveInvitation,
 } from "./invitations";
-import { migratedDatabase, testAuth, testEnv } from "./test/helpers";
+import { migratedDatabase, ORIGIN, testAuth, testEnv } from "./test/helpers";
+import { registrationResponse } from "./test/webauthn";
 
 let sqlite: Database;
 let env: Env;
@@ -101,5 +103,42 @@ describe("invitation lifecycle", () => {
     addPasskey(row.user_id);
     expect(await invitationRegistrationComplete(env.DB, invitation.token)).toBe(true);
     expect(await invitationRegistrationComplete(env.DB, "")).toBe(false);
+  });
+});
+
+describe("invitation registration", () => {
+  const registerWith = async (token: string | null, query: Record<string, string> = {}) => {
+    const headers = new Headers({ origin: ORIGIN });
+    if (token) headers.set(INVITATION_HEADER, token);
+    const optionsResponse = await auth.api.generatePasskeyRegistrationOptions({ headers, query, asResponse: true });
+    const options = await optionsResponse.json() as { challenge: string };
+    headers.set("cookie", optionsResponse.headers.getSetCookie().map((value) => value.split(";")[0]!).join("; "));
+    const response = await registrationResponse({
+      challenge: options.challenge,
+      origin: ORIGIN,
+      rpId: new URL(ORIGIN).hostname,
+    });
+    return auth.api.verifyPasskeyRegistration({ headers, body: { response } });
+  };
+  const passkeys = () => (sqlite.query("SELECT COUNT(*) AS n FROM passkey").get() as { n: number }).n;
+
+  test("registers a passkey using the invitation header and consumes the invitation", async () => {
+    const invitation = await issue();
+    await registerWith(invitation.token);
+    expect(passkeys()).toBe(1);
+    expect(sqlite.query("SELECT name FROM passkey").get()).toEqual({ name: "person@example.com" });
+    await expect(resolveInvitation(env.DB, invitation.token)).rejects.toThrow();
+  });
+
+  test("ignores a token supplied in the query string", async () => {
+    const invitation = await issue();
+    await expect(registerWith(null, { context: invitation.token })).rejects.toThrow();
+    expect(passkeys()).toBe(0);
+    expect((await resolveInvitation(env.DB, invitation.token)).email).toBe("person@example.com");
+  });
+
+  test("rejects an unknown token", async () => {
+    await expect(registerWith("unknown")).rejects.toThrow();
+    expect(passkeys()).toBe(0);
   });
 });

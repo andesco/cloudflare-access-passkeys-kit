@@ -16,7 +16,7 @@ Cloudflare Access Passkeys Kit has the following security properties:
 - Exactly one confidential OIDC client can be provisioned. It requires PKCE, skips consent, and supports only the authorization-code grant.
 - OIDC ID tokens use RS256 because Cloudflare Access does not support Better Auth’s default Ed25519/OKP signing keys. The included migration removes incompatible legacy keys when upgrading an existing deployment so Better Auth can generate an RSA key.
 - When `PUBLIC_ORIGIN` is set, the Worker serves only that origin, so the admin channel is not reachable on `*.workers.dev` and passkeys, issuer, and invitation links cannot vary by request host.
-- Error logs redact invitation tokens from `/invite/<token>` paths.
+- Invitation tokens live in the URL fragment (`/invite#<token>`) and are sent only in a request header, so they are not written to request logs. Query-string tokens are ignored. Legacy `/invite/<token>` links still work until they expire, and error logs redact that path.
 - Administration requires a separate high-entropy bearer token and exposes no browser dashboard.
 - Lost-passkey recovery is destructive and CLI-only: every existing passkey, session, and OAuth token is revoked before a new invitation is issued.
 

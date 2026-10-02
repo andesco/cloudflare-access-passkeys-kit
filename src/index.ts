@@ -4,6 +4,7 @@ import { ADMIN_BASE_PATH, appName, configuredOrigin } from "./constants";
 import { handleInvitationRequest } from "./invitation-request";
 import { invitationRegistrationComplete } from "./invitations";
 import { cleanup } from "./cleanup";
+import { readBoundedText } from "./http";
 import { redactPath } from "./redact";
 
 function redirect(location: string): Response {
@@ -48,6 +49,21 @@ async function pageAsset(request: Request, env: Env, pathname: string): Promise<
   return securePage(asset, env.TURNSTILE_ENABLED === "true");
 }
 
+const MAX_STATUS_BODY_BYTES = 1024;
+const MAX_TOKEN_LENGTH = 128;
+
+async function invitationComplete(request: Request, env: Env): Promise<boolean> {
+  const text = await readBoundedText(request, MAX_STATUS_BODY_BYTES);
+  let token: unknown;
+  try {
+    token = (JSON.parse(text ?? "") as { token?: unknown }).token;
+  } catch {
+    return false;
+  }
+  return typeof token === "string" && token.length <= MAX_TOKEN_LENGTH &&
+    await invitationRegistrationComplete(env.DB, token);
+}
+
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
@@ -75,9 +91,9 @@ export default {
           headers: { "cache-control": "no-store" },
         });
       }
-      if (url.pathname === "/api/invitations/status" && request.method === "GET") {
-        const token = url.searchParams.get("token") ?? "";
-        const complete = token.length <= 128 && await invitationRegistrationComplete(env.DB, token);
+      if (url.pathname === "/api/invitations/status") {
+        if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
+        const complete = await invitationComplete(request, env);
         return Response.json({ complete }, { headers: { "cache-control": "no-store" } });
       }
       if (url.pathname === "/consent") {
@@ -86,7 +102,9 @@ export default {
           headers: { "cache-control": "no-store" },
         });
       }
+      if (url.pathname === "/invite") return await pageAsset(request, env, "/invite.html");
       if (url.pathname.startsWith("/invite/")) {
+        // Legacy links carried the token in the path; the page reads it from there.
         const token = url.pathname.slice("/invite/".length);
         if (!token || token.includes("/")) return notFound();
         return await pageAsset(request, env, "/invite.html");

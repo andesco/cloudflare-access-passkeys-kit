@@ -326,28 +326,39 @@ async function signIn(): Promise<void> {
   await showSignedInState(credentialID);
 }
 
-async function register(): Promise<void> {
-  const match = /^\/invite\/([^/]+)$/.exec(window.location.pathname);
-  const encodedToken = match?.[1];
-  let token: string | null = null;
-  if (encodedToken) {
-    try {
-      token = decodeURIComponent(encodedToken);
-    } catch {
-      // Treat malformed path encoding as an incomplete invitation link.
-    }
+function invitationTokenFromLocation(): string | null {
+  // Current links keep the token in the fragment, which browsers never send to the server.
+  // Older links carried it in the path; both are accepted.
+  const fromFragment = window.location.hash.slice(1);
+  const encoded = fromFragment || /^\/invite\/([^/]+)$/.exec(window.location.pathname)?.[1];
+  if (!encoded) return null;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return null;
   }
+}
+
+async function register(): Promise<void> {
+  const token = invitationTokenFromLocation();
   if (!token) {
     setStatus("This invitation link is incomplete.", true);
     return;
   }
+  // The token is sent as a header on every request, never in a URL.
+  const inviteAuth = createAuthClient({
+    plugins: [passkeyClient()],
+    fetchOptions: { headers: { "x-invitation-token": token } },
+  });
   const finish = (): void => {
     window.location.replace("/?registered=1");
   };
   const registrationComplete = async (): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/invitations/status?token=${encodeURIComponent(token)}`, {
-        headers: { accept: "application/json" },
+      const response = await fetch("/api/invitations/status", {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ token }),
       });
       const body = await response.json() as { complete?: boolean };
       return response.ok && body.complete === true;
@@ -360,9 +371,7 @@ async function register(): Promise<void> {
     return;
   }
   setStatus("Creating your passkey…");
-  const result = await auth.passkey.addPasskey({
-    context: token,
-  });
+  const result = await inviteAuth.passkey.addPasskey();
   if (result?.error) {
     if (await registrationComplete()) {
       finish();

@@ -84,7 +84,7 @@ async function createInvite(
     id: invitation.id,
     email,
     expiresAt: new Date(invitation.expiresAt).toISOString(),
-    url: `${requestOrigin(env, request)}/invite/${token}`,
+    url: `${requestOrigin(env, request)}/invite#${token}`,
   }, 201);
 }
 
@@ -162,7 +162,7 @@ async function recoverUser(
   return json({
     email,
     expiresAt: new Date(expiresAt).toISOString(),
-    url: `${requestOrigin(env, request)}/invite/${token}`,
+    url: `${requestOrigin(env, request)}/invite#${token}`,
     warning: "All existing passkeys and sessions were revoked.",
   });
 }

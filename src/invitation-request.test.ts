@@ -83,7 +83,7 @@ describe("handleInvitationRequest", () => {
     const response = await run(post({ email: "person@example.com" }));
     expect(response.status).toBe(202);
     expect(sent).toHaveLength(1);
-    expect((sent[0] as { text: string }).text).toContain(`${ORIGIN}/invite/`);
+    expect((sent[0] as { text: string }).text).toContain(`${ORIGIN}/invite#`);
   });
 
   test("returns the same response and sends nothing for an unlisted email", async () => {

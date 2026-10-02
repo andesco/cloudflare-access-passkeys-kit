@@ -191,7 +191,7 @@ bun run admin client provision {cloudflare-team-name}
 bun run admin client show
 ```
 
-Invitation URLs are credentials until consumed. CLI-created URLs should be sent over a secure channel and kept out of tickets, logs, and chat archives. Policy-authorized users can instead request an email from the sign-in page; repeated delivery is suppressed for ten minutes after Cloudflare accepts the message. If Cloudflare rejects a send synchronously, the unsent invitation is removed so the user can retry immediately.
+Invitation URLs (`/invite#<token>`) are credentials until consumed. The token sits in the URL fragment, which browsers never send to the server, so it does not appear in Worker or Cloudflare request logs; the page sends it in an `x-invitation-token` header. Links issued before this format (`/invite/<token>`) still work until they expire. CLI-created URLs should be sent over a secure channel and kept out of tickets, logs, and chat archives. Policy-authorized users can instead request an email from the sign-in page; repeated delivery is suppressed for ten minutes after Cloudflare accepts the message. If Cloudflare rejects a send synchronously, the unsent invitation is removed so the user can retry immediately.
 
 To diagnose delivery, stream Worker logs while requesting an invitation:
 

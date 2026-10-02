@@ -33,7 +33,8 @@ describe("worker routing", () => {
     expect((await get("/sign-in.html")).status).toBe(404);
     expect((await get("/invite/")).status).toBe(404);
     expect((await get("/invite/a/b")).status).toBe(404);
-    expect((await get("/invite/abc")).status).toBe(200);
+    expect((await get("/invite/abc")).status).toBe(200); // legacy path links
+    expect((await get("/invite")).status).toBe(200);
   });
 
   test("rejects requests for any host other than PUBLIC_ORIGIN, including admin", async () => {
@@ -52,9 +53,18 @@ describe("worker routing", () => {
     expect((await get("/__admin/v1/invitations")).status).toBe(401);
   });
 
-  test("reports invitation status as incomplete for unknown or oversized tokens", async () => {
-    expect((await (await get("/api/invitations/status?token=nope")).json()) as unknown).toEqual({ complete: false });
-    expect((await (await get(`/api/invitations/status?token=${"x".repeat(200)}`)).json()) as unknown).toEqual({ complete: false });
+  test("reports invitation status through POST only, never a query string", async () => {
+    const post = (body: string) =>
+      worker.fetch(new Request(`${ORIGIN}/api/invitations/status`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      }) as never, env, ctx);
+    expect((await (await post(JSON.stringify({ token: "nope" }))).json()) as unknown).toEqual({ complete: false });
+    expect((await (await post(JSON.stringify({ token: "x".repeat(200) }))).json()) as unknown).toEqual({ complete: false });
+    expect((await (await post("not json")).json()) as unknown).toEqual({ complete: false });
+    expect((await (await post("x".repeat(5000))).json()) as unknown).toEqual({ complete: false });
+    expect((await get("/api/invitations/status?token=nope")).status).toBe(405);
   });
 });
 

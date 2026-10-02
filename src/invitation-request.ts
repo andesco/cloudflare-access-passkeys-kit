@@ -2,6 +2,7 @@ import type { Auth } from "./auth";
 import { accessPolicyAllowsEmail } from "./access-policy";
 import { appName, requestOrigin } from "./constants";
 import { cancelUnsentInvitation, issueInvitation } from "./invitations";
+import { readBoundedText } from "./http";
 import { normalizeEmail } from "./validation";
 
 const GENERIC_MESSAGE = "If authorized, we'll send an invitation email.";
@@ -15,30 +16,11 @@ function response(): Response {
 
 const MAX_BODY_BYTES = 4096;
 
-async function readBoundedText(request: Request): Promise<string | null> {
-  const reader = request.body?.getReader();
-  if (!reader) return null;
-  const decoder = new TextDecoder();
-  let text = "";
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_BODY_BYTES) {
-      await reader.cancel();
-      return null;
-    }
-    text += decoder.decode(value, { stream: true });
-  }
-  return text + decoder.decode();
-}
-
 export async function readRequest(
   request: Request,
 ): Promise<{ email: string; turnstileToken: string } | null> {
   if (!request.headers.get("content-type")?.includes("application/json")) return null;
-  const text = await readBoundedText(request);
+  const text = await readBoundedText(request, MAX_BODY_BYTES);
   if (text === null) return null;
   let body: unknown;
   try {
@@ -75,7 +57,7 @@ async function processRequest(request: Request, env: Env, getAuth: () => Auth, e
     if (!(await accessPolicyAllowsEmail(env, email))) return;
     const invitation = await issueInvitation(getAuth(), env.DB, email, 7);
     if (!invitation) return;
-    const url = `${requestOrigin(env, request)}/invite/${invitation.token}`;
+    const url = `${requestOrigin(env, request)}/invite#${invitation.token}`;
     const name = appName(env);
     try {
       const result = await env.EMAIL.send({
