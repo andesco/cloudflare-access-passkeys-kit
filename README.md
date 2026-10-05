@@ -16,7 +16,9 @@ Cloudflare Access is the access-control layer. It continues to handle applicatio
 `Access: Apps and Policies Read`
 - domain or subdomain onboarded to Cloudflare Email Service
 
+<!-- Deploy to Cloudflare button disabled until the one-click flow is verified end to end:
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/andesco/cloudflare-access-passkeys-kit)
+-->
 
 ### Suggested Prompt
 
@@ -25,53 +27,98 @@ Use the authenticated `cf` CLI and the Cloudflare API or MCP to deploy this repo
 
 https://github.com/andesco/cloudflare-access-passkeys-kit
 
-Read the README completely and follow its Deploy to Cloudflare instructions, including the prerequisites, security constraints, Cloudflare Access integration, and verification steps. Ask the user which email identity to invite before creating the first invitation.
+Read the README completely and follow its Manual Deployment steps in order, including the prerequisites, security constraints, Cloudflare Access integration, and verification steps. Ask the user which email identity to invite before creating the first invitation.
 ```
 
-### Cloudflare Dashboard
+### Manual Deployment (`cf` CLI)
 
-Workers & Pages → [**Create application**](https://dash.cloudflare.com/?to=/:account/workers-and-pages/create/deploy-to-workers): Continue with GitHub: Clone a public repository via Git URL:
+Verified order of operations. Do not run `bun run deploy` first: with required secrets missing it fails, and the failed attempt can leave an empty Worker behind that blocks the name.
 
-```text
-https://github.com/andesco/cloudflare-access-passkeys-kit
-```
-
-Cloudflare automatically provisions and binds D1 from the draft `DB` binding in `cloudflare.config.ts`. After the Worker is created, apply the included schema migration with `D1_DATABASE_ID={database-id} bun run migrate` (find the ID with `bunx cf d1 list`). Do not add an account-specific database ID to the repository.
-
-During setup, provide two different high-entropy secrets:
-
-- `BETTER_AUTH_SECRET`: signs Better Auth cookies and tokens.
-- `ADMIN_TOKEN`: authenticates the Bun administration CLI.
-
-Generate each value independently with `openssl rand -hex 32`.
-
-These deployment-specific values are requested as bindings: `CLOUDFLARE_ACCOUNT_ID`, `ACCESS_POLICY_ID`, `CLOUDFLARE_API_TOKEN`, and `INVITATION_FROM`. `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are required only when `TURNSTILE_ENABLED` is `"true"`.
-
-Set the non-secret `APP_NAME` variable to the user-facing application name shown on the sign-in and enrollment pages, passkey prompt, and invitation email. It defaults to “Cloudflare Access Passkeys Kit”.
-
-Set the non-secret `PUBLIC_ORIGIN` variable to the Worker’s public origin, such as `https://auth.example.com`. When set, the Worker uses it for the WebAuthn relying party, OIDC issuer, and invitation links, and answers every other hostname (including `*.workers.dev`, and so the admin channel on it) with 404. When empty, the origin of each request is used.
-
-### `cf` CLI
+**1. Install and sign in**
 
 ```bash
 git clone https://github.com/andesco/cloudflare-access-passkeys-kit.git
 cd cloudflare-access-passkeys-kit
 bun install
 bunx cf auth login
-D1_DATABASE_ID={database-id} bun run deploy
-bunx wrangler secret put BETTER_AUTH_SECRET
-bunx wrangler secret put ADMIN_TOKEN
 ```
 
-The first deploy creates the Worker, automatically provisions D1, and then applies `migrations/0001_initial.sql`. Adding each secret creates a new production Worker version.
+**2. Collect the values** (the deploy needs all six secrets)
 
-Onboard the sender domain before invitations are requested:
+| Secret | Where it comes from |
+| --- | --- |
+| `BETTER_AUTH_SECRET` | `openssl rand -hex 32` |
+| `ADMIN_TOKEN` | a different `openssl rand -hex 32` |
+| `CLOUDFLARE_ACCOUNT_ID` | `bunx cf accounts list` (the `id` field) |
+| `ACCESS_POLICY_ID` | `bunx cf zero-trust access policies list`: the `id` of an `allow` policy whose `include` rules are exact `email` selectors and that has no `require` rules |
+| `CLOUDFLARE_API_TOKEN` | open the [account token template](https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22access%22%2C%22type%22%3A%22read%22%7D%5D&name=Access%20Passkeys%20Kit%20policy%20read) (permission prefilled), confirm it lists only `Access: Apps and Policies → Read`, then **Continue to summary** and **Create Token** (the `cf` login cannot create tokens). Copy the value; it is shown once |
+| `INVITATION_FROM` | a sender address on an onboarded Email Service domain, such as `auth@send.example.com` |
+
+Onboard the sender domain if it is not already (it must be on a zone in your account):
 
 ```bash
-bunx wrangler email sending enable send.example.com
+bunx cf email-sending subdomains create --zone example.com --name send.example.com
 ```
 
-Set the enrollment bindings with `wrangler secret put`, or use one JSON object over standard input with `wrangler secret bulk`. Never commit the Cloudflare Access API token or Turnstile secret. The Email Sending binding is intentionally unrestricted in the reusable template because each deployment chooses its own sender domain; the application always sends from `INVITATION_FROM`.
+**3. Write a secrets file outside the repository**
+
+```bash
+cat > ~/passkeys-kit-secrets.env <<EOF
+BETTER_AUTH_SECRET=$(openssl rand -hex 32)
+ADMIN_TOKEN=$(openssl rand -hex 32)
+CLOUDFLARE_ACCOUNT_ID={account-id}
+ACCESS_POLICY_ID={policy-id}
+CLOUDFLARE_API_TOKEN={api-token}
+INVITATION_FROM=auth@send.example.com
+EOF
+chmod 600 ~/passkeys-kit-secrets.env
+```
+
+Keep `ADMIN_TOKEN`; the CLI administration commands need it. Delete the file when you are done.
+
+**4. Choose the name, domain and origin**
+
+The committed config deploys a Worker named `cloudflare-access-passkeys-kit` on `*.workers.dev` with an empty `PUBLIC_ORIGIN`. For a real deployment, copy `cloudflare.local.example.ts` to `cloudflare.local.ts` and set your own `name`, `domains` and `vars.PUBLIC_ORIGIN` (see [Personal Configuration](#personal-configuration-cloudflarelocalts)), then add `--mode personal` to the `cf` commands below, or use the `*:local` scripts after step 6. Leave `database` out of `cloudflare.local.ts` for the first deploy; `cf` provisions D1 itself.
+
+**5. First deploy, with the secrets**
+
+```bash
+bun run build:client
+bunx cf deploy --secrets-file ~/passkeys-kit-secrets.env
+```
+
+This creates the Worker, provisions the D1 database (`cloudflare-access-passkeys-kit-db` by default), attaches the daily cron, and sets all six secrets.
+
+**6. Apply the schema**
+
+```bash
+bunx cf d1 list   # copy the id of the new database
+bunx cf d1 migrations apply {database-id}
+```
+
+Then put that ID in `cloudflare.local.ts` (`database.id`) so `bun run deploy:local` and `bun run migrate:local` work from now on. For the default config, `D1_DATABASE_ID={database-id} bun run deploy` also works for later deploys.
+
+**7. Check it**
+
+```bash
+curl -i https://{your-worker-origin}/                              # 200, the sign-in page
+curl -i https://{your-worker-origin}/.well-known/openid-configuration   # 200
+curl -i -H "authorization: Bearer {admin-token}" https://{your-worker-origin}/__admin/v1/invitations   # 200
+```
+
+If `PUBLIC_ORIGIN` is set, requests to any other hostname (including `*.workers.dev`) return 404 by design; use the public origin.
+
+Later changes to a single secret: `bunx cf workers secrets update {NAME} --worker {worker-name} --text '{value}'`. Each change creates a new production Worker version.
+
+**Turnstile.** `TURNSTILE_ENABLED` defaults to `"true"`, and the invitation form then needs a Turnstile widget. Create one (dashboard → Turnstile) for your origin and set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` as secrets, or set `TURNSTILE_ENABLED` to `"false"` in `cloudflare.local.ts`. Without the keys, invitation requests from the sign-in page fail.
+
+**Variables.** Set `APP_NAME` (shown on the sign-in and enrollment pages, passkey prompt and invitation email; defaults to “Cloudflare Access Passkeys Kit”) and `PUBLIC_ORIGIN` (the Worker’s public origin, such as `https://auth.example.com`) in `cloudflare.local.ts`. When `PUBLIC_ORIGIN` is set, the Worker uses it for the WebAuthn relying party, OIDC issuer and invitation links, and answers every other hostname with 404. When empty, the origin of each request is used. Changing it later invalidates registered passkeys.
+
+Never commit the Cloudflare Access API token, the Turnstile secret or the secrets file. The Email Sending binding is intentionally unrestricted in the reusable template because each deployment chooses its own sender domain; the application always sends from `INVITATION_FROM`.
+
+<!-- Dashboard "clone a public repository" flow not yet verified. It runs `bun run deploy`, which needs the secrets and D1 ID described above.
+Workers & Pages → Create application → Continue with GitHub → Clone a public repository via Git URL: https://github.com/andesco/cloudflare-access-passkeys-kit
+-->
 
 ### Connect Cloudflare Access
 
