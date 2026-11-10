@@ -172,6 +172,10 @@ https://{cloudflare-team-name}.cloudflareaccess.com/cdn-cgi/access/callback
 
 Cloudflare Access policies continue to decide which emails and identities may reach each protected application. This identity provider only authenticates an invited user with a passkey and supplies the resulting OIDC identity to Cloudflare Access.
 
+### Example: share a local preview
+
+Use a named Cloudflare Tunnel and Cloudflare Access to share a local service with users who can sign in through the passkey provider. See [Protected local preview](examples/protected-cloudflare-tunnel/README.md).
+
 ### Passkey behavior
 
 Registration creates an email-bound, discoverable passkey: the verified invitation email becomes its WebAuthn user name, display name, and Better Auth label. Sign-in is usernameless: the passkey button opens the browser or operating system’s account chooser without first requesting an email address. The page’s email field belongs only to the separate invitation form.
