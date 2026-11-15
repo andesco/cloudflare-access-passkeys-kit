@@ -39,7 +39,7 @@ describe("guards", () => {
 
 describe("passkey endpoints", () => {
   let sqlite: Database;
-  let sent: { to: string; subject: string }[];
+  let sent: { to: string; subject: string; text: string }[];
   let env: Env;
   let auth: ReturnType<typeof testAuth>;
   const passkeyCount = () => (sqlite.query("SELECT COUNT(*) AS n FROM passkey").get() as { n: number }).n;
@@ -48,7 +48,7 @@ describe("passkey endpoints", () => {
     sqlite = migratedDatabase();
     sent = [];
     env = testEnv(sqlite, {
-      EMAIL: { send: async (message: { to: string; subject: string }) => { sent.push(message); return { messageId: "m" }; } } as never,
+      EMAIL: { send: async (message: { to: string; subject: string; text: string }) => { sent.push(message); return { messageId: "m" }; } } as never,
     });
     auth = testAuth(sqlite, env);
   });
@@ -59,6 +59,9 @@ describe("passkey endpoints", () => {
     expect(passkeyCount()).toBe(1);
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ to: "person@example.com" });
+    expect(sent[0]!.text).toContain("sign-in page");
+    expect(sent[0]!.text).toContain("recovery link");
+    expect(sent[0]!.text).not.toContain("administrator");
   });
 
   test("refuses to remove the only passkey", async () => {

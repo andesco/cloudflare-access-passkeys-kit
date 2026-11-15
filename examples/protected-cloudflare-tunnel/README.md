@@ -12,7 +12,7 @@ The passkeys kit authenticates the user; Access evaluates the application's poli
 
 ## Before you start
 
-- Deploy the kit and [connect its OIDC provider to Access](../../README.md#connect-cloudflare-access). Invite and enroll at least one user whose email is permitted by the Access policy.
+- Deploy the kit and [connect its OIDC provider to Access](../../README.md#connect-cloudflare-access). Enroll at least one person who is in one of the Access groups in `ACCESS_GROUP_IDS` and whom the Access policy allows: they request a link from the sign-in page.
 - Have a Cloudflare account, a domain in Cloudflare DNS, and a reusable Access allow policy for the people who should see the preview. Check who the policy includes before sharing.
 - Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) on the computer running the local server.
 - Choose a hostname, such as `preview.example.com`, and a local port. This example uses `3000`.
@@ -126,6 +126,6 @@ The helper checks the local listener and runs `cloudflared` in the foreground. S
 
 ## Verify and share
 
-Open the hostname in a private browser window. It should first show the Cloudflare Access sign-in page. Sign in with an invited passkey identity and check that the preview loads. Also verify that a person outside the allow policy cannot access it. If the sign-in page is missing or the wrong people can get in, stop the connector and review the application and policy before sharing the URL.
+Open the hostname in a private browser window. It should first show the Cloudflare Access sign-in page. Sign in with an enrolled passkey identity and check that the preview loads. Also verify that a person outside the allow policy cannot access it. If the sign-in page is missing or the wrong people can get in, stop the connector and review the application and policy before sharing the URL.
 
 The local service is still accessible to software on your computer directly; Access protects requests that pass through Cloudflare. The preview goes offline when the local server, connector, or computer stops. When finished, stop the connector. Remove the published route, DNS record, Access application, and tunnel if you no longer need them; do not delete shared policies or identity providers used by other applications.

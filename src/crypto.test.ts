@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { randomToken, sha256Hex, timingSafeEqual } from "./crypto";
+import { hmacSha256Hex, randomToken, sha256Hex } from "./crypto";
 
 describe("auth cryptography helpers", () => {
   test("hashes values with SHA-256", async () => {
@@ -8,9 +8,10 @@ describe("auth cryptography helpers", () => {
     );
   });
 
-  test("compares secrets without a length-dependent branch", async () => {
-    expect(await timingSafeEqual("same", "same")).toBe(true);
-    expect(await timingSafeEqual("same", "different")).toBe(false);
+  test("computes HMAC-SHA256 as hex (RFC 4231 test case 2)", async () => {
+    expect(await hmacSha256Hex("Jefe", "what do ya want for nothing?")).toBe(
+      "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+    );
   });
 
   test("creates URL-safe 256-bit invitation tokens", () => {

@@ -1,6 +1,6 @@
 {
   "name": "cloudflare-access-passkeys-kit",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "deploy": "bun run build:client && cf deploy && bun run migrate",
     "deploy:local": "bun run build:client && cf deploy --mode personal && bun run migrate:local",
     "migrate:local": "cf d1 migrations apply \"$(bun scripts/personal-database-id.ts)\"",
-    "admin": "bun src/admin.ts",
+    "provision": "bun scripts/provision-access.ts",
     "check": "bun run build:client && cf workers types && tsc --noEmit && cf deploy --dry-run",
     "check:local": "bun run build:client && cf workers types --mode personal && tsc --noEmit && cf deploy --dry-run --mode personal",
     "test": "bun test",
@@ -34,17 +34,11 @@
       "BETTER_AUTH_SECRET": {
         "description": "Generate a unique secret with `openssl rand -hex 32`. It signs Better Auth cookies and tokens."
       },
-      "ADMIN_TOKEN": {
-        "description": "Generate a different secret with `openssl rand -hex 32`. The Bun CLI uses it for migrations, invitations, recovery, and OIDC client provisioning."
-      },
       "CLOUDFLARE_ACCOUNT_ID": {
-        "description": "Cloudflare account ID containing the reusable enrollment policy."
-      },
-      "ACCESS_POLICY_ID": {
-        "description": "ID of a reusable Allow policy containing only exact Email selectors."
+        "description": "Cloudflare account ID containing the Access groups listed in ACCESS_GROUP_IDS."
       },
       "CLOUDFLARE_API_TOKEN": {
-        "description": "A restricted token with Access: Apps and Policies Read for the selected account."
+        "description": "A read-only token with exactly one permission: \"Access: Organizations, Identity Providers, and Groups Read\"."
       },
       "TURNSTILE_SITE_KEY": {
         "description": "Public site key for a managed Turnstile widget configured for the Worker hostname."
@@ -54,6 +48,9 @@
       },
       "INVITATION_FROM": {
         "description": "Onboarded Cloudflare Email Sending address, such as auth@send.example.com."
+      },
+      "ACCESS_GROUP_IDS": {
+        "description": "Access group ids (up to 10, separated by commas or spaces) whose email and email-domain rules decide who may enroll. Not a secret. Empty means nobody is eligible."
       }
     }
   }

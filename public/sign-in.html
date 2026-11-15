@@ -17,32 +17,32 @@
           <div class="app-identity"><span data-app-name>andrewe.dev</span></div>
           <h1 id="sign-in-title">Sign in to <span data-login-target>andrewe.dev</span></h1>
           <div id="sign-in-options" class="auth-options">
-            <div class="auth-group">
+            <form id="sign-in-form" class="auth-group" aria-label="Sign in">
+              <div id="email-fields" class="auth-fields">
+                <div class="form-row">
+                  <label for="sign-in-email">Email</label>
+                  <input id="sign-in-email" name="email" type="email" autocomplete="username webauthn" autofocus placeholder="example@email.com" required maxlength="254">
+                </div>
+              </div>
+              <div id="invitation-confirmation" class="information-panel invitation-confirmation" hidden>
+                <p>If this address can use this service, a link is on its way. You can ask again in 10 minutes.</p>
+                <p>If no email arrives, ask the person who manages access.</p>
+              </div>
               <button id="primary-action" class="provider-button" type="button">
                 <svg aria-hidden="true" viewBox="0.10 -80.44 100 100" fill="currentColor"><path d="M42.041-36.3281C50.2441-36.3281 57.4707-43.7012 57.4707-53.3203C57.4707-62.8906 50.2441-69.8242 42.041-69.8242C33.8867-69.8242 26.6602-62.6953 26.6602-53.2227C26.6602-43.7012 33.8867-36.3281 42.041-36.3281ZM16.5527-0.683594L67.8223-0.683594L67.8223-11.5723C63.3301-14.6484 60.4492-19.5312 60.1074-25.1465C55.1758-27.7832 49.0723-29.4922 42.041-29.4922C22.168-29.4922 9.76562-15.8203 9.76562-5.9082C9.76562-2.63672 12.3047-0.683594 16.5527-0.683594Z"/><path d="M78.125-38.7695C71.1914-38.7695 65.7227-33.3008 65.7227-26.4648C65.7227-21.2402 68.7988-16.8457 73.5352-14.9414L73.5352 4.00391C73.5352 4.54102 73.7793 4.88281 74.1211 5.27344L77.3438 8.49609C77.7344 8.88672 78.3203 8.93555 78.8086 8.49609L84.9121 2.44141C85.3516 2.00195 85.3516 1.36719 84.9121 0.927734L81.2012-2.7832L86.377-7.86133C86.8164-8.25195 86.8164-8.88672 86.2793-9.375L81.2012-14.4043C87.1094-16.8457 90.4297-21.1426 90.4297-26.4648C90.4297-33.3008 84.9121-38.7695 78.125-38.7695ZM78.0762-33.7891C80.127-33.7891 81.8359-32.0801 81.8359-30.0293C81.8359-27.832 80.127-26.123 78.0762-26.123C75.9766-26.123 74.2188-27.832 74.2188-30.0293C74.2188-32.0801 75.9277-33.7891 78.0762-33.7891Z"/></svg>
                 <span>Sign in with passkey</span>
               </button>
-              <output id="status" aria-live="polite"></output>
-            </div>
-
-            <div class="divider" role="separator" aria-orientation="horizontal"><span>or</span></div>
-
-            <section class="request-invite" aria-label="Request an invitation">
-              <form id="invite-request-form">
-                <div class="form-row">
-                  <label for="invite-email">Email</label>
-                  <input id="invite-email" name="email" type="email" autocomplete="email" placeholder="example@email.com" required maxlength="254">
-                </div>
+              <button id="email-link-action" class="provider-button" type="submit">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+                <span>Email me a link</span>
+              </button>
+              <div id="email-help" class="auth-fields">
+                <p class="fine-print">New here, or lost your passkey? Use the email option.</p>
                 <div id="turnstile-widget"></div>
-                <div class="form-row">
-                  <button class="primary-button" type="submit">Request invitation</button>
-                </div>
-              </form>
-              <output id="invite-request-status" class="confirmation-message" aria-live="polite"></output>
-              <div id="invitation-confirmation" class="information-panel invitation-confirmation" hidden>
-                If <span id="invitation-confirmation-email" class="confirmation-email"></span> is authorized, an invitation will be sent.
               </div>
-            </section>
+              <output id="status" aria-live="polite"></output>
+              <output id="invite-request-status" class="confirmation-message" aria-live="polite"></output>
+            </form>
           </div>
           <div id="signed-in-options" class="auth-options" hidden>
             <dl class="signed-in-details">

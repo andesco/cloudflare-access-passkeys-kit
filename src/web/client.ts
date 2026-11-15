@@ -238,48 +238,57 @@ declare global {
 }
 
 async function setupInvitationRequest(): Promise<void> {
-  const form = document.getElementById("invite-request-form") as HTMLFormElement | null;
+  const form = document.getElementById("sign-in-form") as HTMLFormElement | null;
   if (!form) return;
+  const fields = element<HTMLDivElement>("email-fields");
   const confirmation = element<HTMLDivElement>("invitation-confirmation");
-  const confirmationEmail = element<HTMLElement>("invitation-confirmation-email");
   const status = element<HTMLOutputElement>("invite-request-status");
-  const showConfirmation = (email: string): void => {
-    status.textContent = "";
-    confirmationEmail.textContent = email;
-    form.classList.add("invite-request-form--hidden");
-    form.setAttribute("aria-hidden", "true");
-    form.setAttribute("inert", "");
-    confirmation.hidden = false;
-  };
+  const submit = element<HTMLButtonElement>("email-link-action");
   const config = await getPublicConfig();
+  const useTurnstile = config.turnstileEnabled && Boolean(config.turnstileSiteKey);
   let widgetId: string | undefined;
   let pendingEmail = "";
   let submitting = false;
+  const showStatus = (message: string, error = false): void => {
+    status.dataset.error = String(error);
+    status.textContent = message;
+  };
   const submitInvitation = async (turnstileToken: string): Promise<void> => {
     if (submitting) return;
     submitting = true;
-    status.textContent = "Submitting…";
+    submit.disabled = true;
+    showStatus("Sending…");
     try {
-      await fetch("/api/invitations/request", {
+      const response = await fetch("/api/invitations/request", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: pendingEmail, turnstileToken }),
       });
-      showConfirmation(pendingEmail);
+      if (response.status === 403) {
+        showStatus("Verification failed. Complete it again and retry.", true);
+        submit.disabled = false;
+        return;
+      }
+      if (!response.ok) throw new Error("Request not accepted");
+      status.textContent = "";
+      stopAutofill();
+      fields.hidden = true;
+      submit.hidden = true;
+      element<HTMLElement>("email-help").hidden = true;
+      confirmation.hidden = false;
     } catch {
-      showConfirmation(pendingEmail);
+      showStatus("Try again later.", true);
+      submit.disabled = false;
     } finally {
       submitting = false;
       if (widgetId) window.turnstile?.reset(widgetId);
     }
   };
-  if (!config.turnstileEnabled || !config.turnstileSiteKey) {
-    document.getElementById("turnstile-widget")?.remove();
-  }
+  if (!useTurnstile) document.getElementById("turnstile-widget")?.remove();
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    pendingEmail = element<HTMLInputElement>("invite-email").value.trim();
-    if (!config.turnstileEnabled || !config.turnstileSiteKey) {
+    pendingEmail = element<HTMLInputElement>("sign-in-email").value.trim();
+    if (!useTurnstile) {
       await submitInvitation("");
       return;
     }
@@ -289,41 +298,101 @@ async function setupInvitationRequest(): Promise<void> {
       return;
     }
     if (widgetId) {
-      status.textContent = "Complete the verification to request an invitation.";
+      showStatus("Complete the verification to continue.");
       return;
     }
-    status.textContent = "Loading verification…";
+    showStatus("Loading verification…");
     try {
       await loadTurnstile();
       widgetId = window.turnstile?.render("#turnstile-widget", {
-        sitekey: config.turnstileSiteKey,
+        sitekey: config.turnstileSiteKey as string,
         action: "turnstile-spin-v1",
         size: "flexible",
         theme: "light",
         callback: (token) => void submitInvitation(token),
         "error-callback": () => {
-          status.textContent = "Verification failed. Try again or sign in with your passkey.";
+          showStatus("Verification failed. Try again or sign in with your passkey.", true);
         },
         "expired-callback": () => {
-          status.textContent = "Verification expired. Complete it again to request an invitation.";
+          showStatus("Verification expired. Complete it again to continue.");
         },
       });
-      status.textContent = "Complete the verification to request an invitation.";
+      showStatus("Complete the verification to continue.");
     } catch {
-      status.textContent = "Verification could not load. Try again or sign in with your passkey.";
+      showStatus("Verification could not load. Try again or sign in with your passkey.", true);
     }
   });
 }
 
-async function signIn(): Promise<void> {
-  setStatus("Waiting for your passkey…");
-  const result = await auth.signIn.passkey({ returnWebAuthnResponse: true });
-  if (!result || result.error) {
-    setStatus(result.error.message ?? "Passkey sign-in failed.", true);
+type PasskeySignIn = Awaited<ReturnType<typeof auth.signIn.passkey>>;
+
+// Each sign-in attempt gets a number. Starting any new WebAuthn request makes the browser library
+// abort the one still pending, and that aborted request then resolves with an error. Only the
+// newest attempt may act on its result.
+let attempt = 0;
+let autofillStopped = false;
+
+function stopAutofill(): void {
+  autofillStopped = true;
+  attempt += 1;
+}
+
+async function finishSignIn(result: PasskeySignIn): Promise<void> {
+  const credentialID = result && "webauthn" in result ? result.webauthn.response.id : undefined;
+  await showSignedInState(credentialID);
+}
+
+/** Starts a conditional (autofill) request on the email field. Never shows errors. */
+function focusEmailField(): void {
+  const field = document.getElementById("sign-in-email") as HTMLInputElement | null;
+  const active = document.activeElement;
+  if (!field || field.offsetParent === null) return;
+  if (active && active !== document.body && active !== field) return;
+  field.blur();
+  field.focus({ preventScroll: true });
+}
+
+async function armAutofill(focusField = false): Promise<void> {
+  if (autofillStopped) return;
+  try {
+    if (!await window.PublicKeyCredential?.isConditionalMediationAvailable?.()) return;
+  } catch {
     return;
   }
-  const credentialID = "webauthn" in result ? result.webauthn.response.id : undefined;
-  await showSignedInState(credentialID);
+  const mine = ++attempt;
+  let result: PasskeySignIn | undefined;
+  try {
+    const pending = auth.signIn.passkey({ autoFill: true, returnWebAuthnResponse: true });
+    // On first load, focus the email field once the request is under way, so the browser can offer
+    // the passkey without a tap. Skipped if the person has already focused something else.
+    if (focusField) setTimeout(focusEmailField, 600);
+    result = await pending;
+  } catch {
+    return;
+  }
+  // Failed, aborted or nothing chosen: stay silent. A newer attempt owns the page now.
+  if (mine !== attempt || !result || result.error) return;
+  await finishSignIn(result);
+}
+
+async function signIn(): Promise<void> {
+  // The library aborts the pending autofill request when this modal request starts.
+  const mine = ++attempt;
+  setStatus("Waiting for your passkey…");
+  let result: PasskeySignIn | undefined;
+  try {
+    result = await auth.signIn.passkey({ returnWebAuthnResponse: true });
+  } catch {
+    result = undefined;
+  }
+  if (mine !== attempt) return;
+  if (!result || result.error) {
+    setStatus(result?.error?.message ?? "Passkey sign-in failed.", true);
+    void armAutofill();
+    return;
+  }
+  setStatus("");
+  await finishSignIn(result);
 }
 
 function invitationTokenFromLocation(): string | null {
@@ -394,4 +463,5 @@ if (action === "sign-in") {
   element<HTMLButtonElement>("sign-out-action").onclick = () => void signOut();
   element<HTMLButtonElement>("add-passkey-action").onclick = () => void addPasskey();
   void setupInvitationRequest();
+  void armAutofill(true);
 }

@@ -4,7 +4,7 @@ import { betterAuth } from "better-auth";
 import { APIError, getSessionFromCtx } from "better-auth/api";
 import { jwt } from "better-auth/plugins";
 import { appName, requestOrigin } from "./constants";
-import { consumeInvitation, invitationToken, resolveInvitation } from "./invitations";
+import { clearPendingRecovery, completeInvitation, invitationToken, resolveInvitation } from "./invitations";
 import { assertCanAddPasskey, notifyPasskeyChange, passkeyManagementHook } from "./passkey-management";
 
 /** `database` overrides the Better Auth adapter handle; tests pass raw SQLite while `env.DB` stays a D1 stand-in. */
@@ -53,7 +53,8 @@ export function createAuth(env: Env, request: Request, database: unknown = env.D
           },
           afterVerification: async ({ ctx, verification, user }) => {
             const token = invitationToken(ctx);
-            if (!verification.registrationInfo?.userVerified) {
+            const registrationInfo = verification.registrationInfo;
+            if (!registrationInfo?.userVerified) {
               throw new APIError("UNAUTHORIZED", { message: "User verification is required" });
             }
             if (!token) {
@@ -70,15 +71,16 @@ export function createAuth(env: Env, request: Request, database: unknown = env.D
                 sessionCreatedAt: session.session.createdAt,
                 passkeyCount: passkeys.length,
               });
+              // A credential left pending by a failed recovery must never revoke anything later.
+              await clearPendingRecovery(env.DB, user.id);
               await notifyPasskeyChange(env, session.user.email, "added");
               return { name: session.user.email };
             }
-            // Validate ownership before consuming so a mismatched invitation is not burned.
-            const pending = await resolveInvitation(env.DB, token);
-            if (pending.user_id !== user.id) {
-              throw new APIError("FORBIDDEN", { message: "Invitation does not match this user" });
-            }
-            const invitation = await consumeInvitation(env.DB, token);
+            // Validates ownership before consuming, so a mismatched invitation is not burned. For a
+            // recovery link this only records the verified credential ID; the database trigger
+            // revokes the old passkeys, sessions and OAuth grants in the same statement that stores
+            // this credential, so a failed insert revokes nothing.
+            const invitation = await completeInvitation(env.DB, token, user.id, registrationInfo.credential.id);
             return { name: invitation.email };
           },
         },
@@ -101,10 +103,9 @@ export function createAuth(env: Env, request: Request, database: unknown = env.D
           oauthAuthServerConfig: true,
           openidConfig: true,
         },
-        clientReference: ({ user }) => user?.email.startsWith("_system.")
-          ? "cloudflare-access"
-          : undefined,
-        clientPrivileges: ({ user }) => user?.email.startsWith("_system.") ?? false,
+        // No user may create, read or change OAuth clients over HTTP; clients are provisioned
+        // directly in the database.
+        clientPrivileges: () => false,
       }),
     ],
   });

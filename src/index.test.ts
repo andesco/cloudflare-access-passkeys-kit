@@ -29,6 +29,16 @@ describe("worker routing", () => {
     expect((await get("/")).headers.get("content-security-policy")).toContain("challenges.cloudflare.com");
   });
 
+  test("exposes the Turnstile site key in /api/config only when enabled", async () => {
+    expect((await (await get("/api/config")).json()) as unknown).toEqual({ appName: "Test App", turnstileEnabled: false });
+    env = { ...env, TURNSTILE_ENABLED: "true", TURNSTILE_SITE_KEY: "site-key" };
+    expect((await (await get("/api/config")).json()) as unknown).toEqual({
+      appName: "Test App",
+      turnstileEnabled: true,
+      turnstileSiteKey: "site-key",
+    });
+  });
+
   test("hides raw .html assets and the invitation page for malformed tokens", async () => {
     expect((await get("/sign-in.html")).status).toBe(404);
     expect((await get("/invite/")).status).toBe(404);
@@ -37,20 +47,15 @@ describe("worker routing", () => {
     expect((await get("/invite")).status).toBe(200);
   });
 
-  test("rejects requests for any host other than PUBLIC_ORIGIN, including admin", async () => {
+  test("rejects requests for any host other than PUBLIC_ORIGIN", async () => {
     const other = "https://worker.example.workers.dev";
     expect((await get("/health", other)).status).toBe(404);
-    expect((await get("/__admin/v1/invitations", other)).status).toBe(404);
     expect((await get("/health")).status).toBe(200);
   });
 
   test("serves any host when PUBLIC_ORIGIN is unset", async () => {
     env = { ...env, PUBLIC_ORIGIN: "" };
     expect((await get("/health", "http://localhost:8787")).status).toBe(200);
-  });
-
-  test("requires the admin bearer token", async () => {
-    expect((await get("/__admin/v1/invitations")).status).toBe(401);
   });
 
   test("reports invitation status through POST only, never a query string", async () => {

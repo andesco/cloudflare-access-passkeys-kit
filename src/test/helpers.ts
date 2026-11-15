@@ -43,6 +43,7 @@ export function d1(db: Database): D1Database {
   } as unknown as D1Database;
 }
 
+/** Applies every migration in `migrations/`, in file-name order, as `cf d1 migrations apply` would. */
 export function migratedDatabase(): Database {
   const db = new Database(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
@@ -59,12 +60,11 @@ export function testEnv(db: Database, overrides: Partial<Env> = {}): Env {
   return {
     DB: d1(db),
     BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-0123",
-    ADMIN_TOKEN: "test-admin-token",
     APP_NAME: "Test App",
     PUBLIC_ORIGIN: ORIGIN,
     TURNSTILE_ENABLED: "false",
+    ACCESS_GROUP_IDS: "",
     CLOUDFLARE_ACCOUNT_ID: "account",
-    ACCESS_POLICY_ID: "policy",
     CLOUDFLARE_API_TOKEN: "token",
     INVITATION_FROM: "auth@send.test",
     INVITE_RATE_LIMITER: { limit: async () => ({ success: true }) },

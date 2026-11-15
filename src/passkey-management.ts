@@ -44,7 +44,7 @@ export function assertCanRemovePasskey(
 
 export async function notifyPasskeyChange(env: Env, email: string, change: PasskeyChange): Promise<void> {
   const name = appName(env);
-  const text = `A passkey was ${change} ${change === "added" ? "to" : "from"} your ${name} account.\n\nIf this was not you, contact the administrator to recover your account.`;
+  const text = `A passkey was ${change} ${change === "added" ? "to" : "from"} your ${name} account.\n\nIf this was not you, recover your account: on the ${name} sign-in page, request a recovery link for this address. Completing it removes every existing passkey and signs out all sessions.`;
   try {
     await env.EMAIL.send({
       to: email,

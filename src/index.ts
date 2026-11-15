@@ -1,6 +1,5 @@
 import { createAuth, type Auth } from "./auth";
-import { handleAdmin } from "./admin-api";
-import { ADMIN_BASE_PATH, appName, configuredOrigin } from "./constants";
+import { appName, configuredOrigin } from "./constants";
 import { handleInvitationRequest } from "./invitation-request";
 import { invitationRegistrationComplete } from "./invitations";
 import { cleanup } from "./cleanup";
@@ -79,7 +78,7 @@ export default {
       if (url.pathname === "/") return await pageAsset(request, env, "/sign-in.html");
       if (url.pathname === "/sign-in") return redirect(`/${url.search}`);
       if (url.pathname === "/api/invitations/request") {
-        return await handleInvitationRequest(request, env, getAuth, ctx);
+        return await handleInvitationRequest(request, env, ctx);
       }
       if (url.pathname === "/api/config") {
         const turnstileEnabled = env.TURNSTILE_ENABLED === "true";
@@ -109,7 +108,6 @@ export default {
         if (!token || token.includes("/")) return notFound();
         return await pageAsset(request, env, "/invite.html");
       }
-      if (url.pathname.startsWith(ADMIN_BASE_PATH)) return await handleAdmin(request, env, getAuth);
       if (url.pathname === "/.well-known/openid-configuration") {
         return Response.json(await getAuth().api.getOpenIdConfig(), {
           headers: { "cache-control": "public, max-age=300" },

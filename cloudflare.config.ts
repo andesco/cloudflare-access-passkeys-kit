@@ -10,7 +10,7 @@ export interface PersonalConfig {
   domains?: string[];
   database?: { id?: string; name?: string };
   allowedSenderAddresses?: string[];
-  vars?: { APP_NAME?: string; TURNSTILE_ENABLED?: string; PUBLIC_ORIGIN?: string };
+  vars?: { APP_NAME?: string; TURNSTILE_ENABLED?: string; PUBLIC_ORIGIN?: string; ACCESS_GROUP_IDS?: string };
 }
 
 async function loadPersonal(): Promise<PersonalConfig> {
@@ -42,6 +42,9 @@ export default defineConfig(async ({ mode }) => {
         APP_NAME: bindings.text(personal.vars?.APP_NAME ?? "Cloudflare Access Passkeys Kit"),
         TURNSTILE_ENABLED: bindings.text(personal.vars?.TURNSTILE_ENABLED ?? "true"),
         PUBLIC_ORIGIN: bindings.text(personal.vars?.PUBLIC_ORIGIN ?? ""),
+        // Access group ids (commas and/or whitespace) whose email and email-domain rules decide who may enrol.
+        // Not a secret. Empty means nobody is eligible.
+        ACCESS_GROUP_IDS: bindings.text(personal.vars?.ACCESS_GROUP_IDS ?? ""),
         DB: bindings.d1(personal.database ?? {}),
         EMAIL: bindings.sendEmail(
           personal.allowedSenderAddresses ? { allowedSenderAddresses: personal.allowedSenderAddresses } : {},
@@ -54,9 +57,7 @@ export default defineConfig(async ({ mode }) => {
         // TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY are optional secrets (see src/env.d.ts), so they are
         // not declared here: declared secrets are required for a deploy to succeed.
         BETTER_AUTH_SECRET: bindings.secret(),
-        ADMIN_TOKEN: bindings.secret(),
         CLOUDFLARE_ACCOUNT_ID: bindings.secret(),
-        ACCESS_POLICY_ID: bindings.secret(),
         CLOUDFLARE_API_TOKEN: bindings.secret(),
         INVITATION_FROM: bindings.secret(),
       },

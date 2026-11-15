@@ -168,6 +168,8 @@ h1 {
   gap: var(--spacing);
 }
 
+#sign-in-form { gap: calc(var(--spacing) * 3); }
+
 .field-label {
   margin-bottom: 2px;
   color: var(--text);
@@ -266,20 +268,21 @@ input:focus-visible {
   gap: calc(var(--spacing) * 4);
 }
 
-#invite-request-form { gap: calc(var(--spacing) * 3); }
-
-#invite-request-form.invite-request-form--hidden {
-  visibility: hidden;
-  pointer-events: none;
+.auth-fields {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 3);
 }
+
+.auth-fields[hidden] { display: none; }
 
 .form-row { gap: var(--spacing); }
 
-.invitation-confirmation {
-  position: absolute;
-  inset: 0 0 auto;
-  display: block;
-}
+.invitation-confirmation { display: block; }
+
+.invitation-confirmation[hidden] { display: none; }
+
+.invitation-confirmation p + p { margin-top: calc(var(--spacing) * 2); }
 
 .confirmation-message {
   position: absolute;
@@ -321,7 +324,14 @@ input::placeholder { color: var(--placeholder); }
 
 #turnstile-widget {
   width: 100%;
+}
+
+#turnstile-widget:not(:empty) {
   min-height: 65px;
+}
+
+#email-help .fine-print {
+  margin: 0;
 }
 
 output {

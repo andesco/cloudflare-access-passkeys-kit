@@ -10,5 +10,7 @@ export default {
     APP_NAME: "Example",
     TURNSTILE_ENABLED: "true",
     PUBLIC_ORIGIN: "https://auth.example.com",
+    // Access group ids, separated by commas and/or whitespace (at most 10).
+    ACCESS_GROUP_IDS: "00000000-0000-0000-0000-000000000000",
   },
 } satisfies PersonalConfig;

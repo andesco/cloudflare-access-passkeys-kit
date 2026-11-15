@@ -5,8 +5,23 @@ export async function sha256(value: string): Promise<ArrayBuffer> {
 }
 
 export async function sha256Hex(value: string): Promise<string> {
-  const digest = new Uint8Array(await sha256(value));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return hex(new Uint8Array(await sha256(value)));
+}
+
+function hex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** HMAC-SHA256 of `value` keyed by `key`, as lowercase hex. */
+export async function hmacSha256Hex(key: string, value: string): Promise<string> {
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return hex(new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(value))));
 }
 
 export function randomToken(bytes = 32): string {
@@ -16,15 +31,4 @@ export function randomToken(bytes = 32): string {
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/u, "");
-}
-
-export async function timingSafeEqual(left: string, right: string): Promise<boolean> {
-  const [leftHash, rightHash] = await Promise.all([sha256(left), sha256(right)]);
-  const leftBytes = new Uint8Array(leftHash);
-  const rightBytes = new Uint8Array(rightHash);
-  let difference = 0;
-  for (let index = 0; index < leftBytes.length; index += 1) {
-    difference |= leftBytes[index]! ^ rightBytes[index]!;
-  }
-  return difference === 0;
 }

@@ -1,11 +1,13 @@
 BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
-ADMIN_TOKEN=replace-with-a-separate-long-random-token
 CLOUDFLARE_ACCOUNT_ID=your-cloudflare-account-id
-ACCESS_POLICY_ID=your-reusable-access-policy-id
-CLOUDFLARE_API_TOKEN=restricted-access-apps-and-policies-read-token
+# Read-only token with exactly one permission: "Access: Organizations, Identity Providers, and Groups Read".
+CLOUDFLARE_API_TOKEN=read-only-access-token
 TURNSTILE_SITE_KEY=your-turnstile-site-key
 TURNSTILE_SECRET_KEY=your-turnstile-secret-key
 INVITATION_FROM=auth@send.example.com
 APP_NAME=Cloudflare Access Passkeys Kit
 TURNSTILE_ENABLED=true
 PUBLIC_ORIGIN=
+# Access group ids, separated by commas and/or whitespace (at most 10). Only the email and email-domain
+# rules of these groups decide who may enrol a passkey. Empty means nobody is eligible.
+ACCESS_GROUP_IDS=
